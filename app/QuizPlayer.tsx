@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface QuizPlayerProps {
   questions: QuizQuestion[];
-  onComplete: () => void;
+  onComplete: (score: number) => void; // <--- CHANGED signature
 }
 
 export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
@@ -21,7 +21,6 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
 
   const handleCheck = () => {
     if (selectedOption === null) return;
-    
     setIsAnswered(true);
     if (selectedOption === currentQuestion.correct_answer) {
       setScore(s => s + 1);
@@ -61,7 +60,12 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
           <button onClick={resetQuiz} className="px-4 py-2 rounded-full bg-neutral-700 hover:bg-neutral-600 transition flex items-center gap-2 text-sm">
             <RefreshCw className="w-4 h-4" /> Retry
           </button>
-          <button onClick={onComplete} className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 transition text-white text-sm font-semibold">
+          
+          {/* FIX: Ensure this calls onComplete with the score */}
+          <button 
+            onClick={() => onComplete(score)} 
+            className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 transition text-white text-sm font-semibold"
+          >
             Continue Course
           </button>
         </div>
@@ -69,11 +73,10 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
     );
   }
 
-  // --- QUESTION VIEW ---
+  // ... (Keep the rest of the Question View return statement exactly as it was) ...
   return (
     <div className="bg-neutral-800/50 rounded-xl p-6 border border-white/5">
-      {/* Progress Bar */}
-      <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-neutral-500 mb-4">
+       <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-neutral-500 mb-4">
         <span>Question {currentIndex + 1} of {questions.length}</span>
         <span>Score: {score}</span>
       </div>
@@ -92,18 +95,13 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
             {currentQuestion.options.map((option, idx) => {
               const isSelected = selectedOption === idx;
               const isCorrect = idx === currentQuestion.correct_answer;
-              
-              // Determine style based on state
-              let style = "border-neutral-700 hover:bg-neutral-700/50"; // Default
-              
-              if (isSelected) style = "border-indigo-500 bg-indigo-500/20 text-indigo-200"; // Selected
-              
+              let style = "border-neutral-700 hover:bg-neutral-700/50";
+              if (isSelected) style = "border-indigo-500 bg-indigo-500/20 text-indigo-200";
               if (isAnswered) {
                  if (isCorrect) style = "border-emerald-500 bg-emerald-500/20 text-emerald-200";
                  else if (isSelected && !isCorrect) style = "border-red-500 bg-red-500/20 text-red-200";
                  else style = "border-neutral-700 opacity-50";
               }
-
               return (
                 <button
                   key={idx}
@@ -135,7 +133,7 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
         ) : (
           <button 
             onClick={handleNext}
-            className="px-6 py-2 bg-indigo-500 text-white font-bold rounded-full flex items-center gap-2 hover:bg-indigo-400 transition"
+            className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-full flex items-center gap-2 hover:bg-emerald-500 transition"
           >
             {currentIndex === questions.length - 1 ? 'Finish Quiz' : 'Next Question'} <ArrowRight className="w-4 h-4" />
           </button>

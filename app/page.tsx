@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, ChevronRight, BookOpen, Brain, CheckCircle, Menu, Lock, X, Save } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { generateCourse } from './actions';
-import { Course, AppState, User } from './types';
+import { generateCourse, generateRemediation, generateQuestionInsight } from './actions';
+import { Course, AppState, User, QuizQuestion, QuizAnswer } from './types';
 import QuizPlayer from './QuizPlayer';
 import Sidebar from './Sidebar';
 import { MOCK_COURSE } from './mockData';
@@ -22,7 +22,13 @@ export default function SignalApp() {
   
   // UI State
   const [query, setQuery] = useState('');
-  const [activeChapterId, setActiveChapterId] = useState<number>(0);
+  const [activeChapterId, setActiveChapterId] = useState<number | null>(null);
+  const [expandedChapters, setExpandedChapters] = useState<number[]>([]);
+  const [remediations, setRemediations] = useState<Record<number, { explanation_markdown: string; quiz: QuizQuestion[] }>>({});
+  const [remediationLoading, setRemediationLoading] = useState<Record<number, boolean>>({});
+  const [quizHistory, setQuizHistory] = useState<Record<string, Record<number, QuizAnswer[]>>>({});
+  const [questionInsights, setQuestionInsights] = useState<Record<number, Record<number, string>>>({});
+  const [questionInsightLoading, setQuestionInsightLoading] = useState<Record<number, Record<number, boolean>>>({});
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -32,6 +38,10 @@ export default function SignalApp() {
   // Profile Edit Inputs
   const [editName, setEditName] = useState('');
   const [editAbout, setEditAbout] = useState('');
+
+  const activeCourseProgress = currentCourse
+    ? courses.find(c => c.course_id === currentCourse.course_id)?.progress
+    : undefined;
 
   // --- PERSISTENCE ---
   useEffect(() => {
@@ -55,6 +65,21 @@ export default function SignalApp() {
       localStorage.setItem('signal_courses', JSON.stringify(courses));
     }
   }, [courses]);
+
+  useEffect(() => {
+    const storedHistory = localStorage.getItem('signal_quiz_history');
+    if (storedHistory) {
+      try {
+        setQuizHistory(JSON.parse(storedHistory));
+      } catch {
+        console.warn("Failed to parse quiz history");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('signal_quiz_history', JSON.stringify(quizHistory));
+  }, [quizHistory]);
 
   // --- AUTH & PROFILE HANDLERS ---
   const handleLogin = (e: React.FormEvent) => {
@@ -88,12 +113,25 @@ export default function SignalApp() {
     setCurrentCourse(null);
     setQuery('');
     setAppState('IDLE');
+    setActiveChapterId(null);
+    setExpandedChapters([]);
+    setRemediations({});
+    setRemediationLoading({});
+    setQuizHistory({});
+    setQuestionInsights({});
+    setQuestionInsightLoading({});
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
   const handleSelectCourse = (course: Course) => {
     setCurrentCourse(course);
-    if(course.chapters.length > 0) setActiveChapterId(course.chapters[0].id);
+    const firstChapterId = course.chapters[0]?.id ?? null;
+    setActiveChapterId(firstChapterId);
+    setExpandedChapters(firstChapterId ? [firstChapterId] : []);
+    setRemediations({});
+    setRemediationLoading({});
+    setQuestionInsights({});
+    setQuestionInsightLoading({});
     setAppState('PLAYING');
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
@@ -126,6 +164,90 @@ export default function SignalApp() {
     });
   };
 
+  const toggleChapter = (chapterId: number) => {
+    setExpandedChapters(prev => {
+      const isOpen = prev.includes(chapterId);
+      if (isOpen) {
+        setActiveChapterId(current => (current === chapterId ? null : current));
+        return [];
+      }
+      setActiveChapterId(chapterId);
+      return [chapterId];
+    });
+  };
+
+  const advanceToNextChapter = (chapterId: number) => {
+    if (!currentCourse) return;
+    const idx = currentCourse.chapters.findIndex(c => c.id === chapterId);
+    if (idx < currentCourse.chapters.length - 1) {
+      const nextId = currentCourse.chapters[idx + 1].id;
+      setActiveChapterId(nextId);
+      setExpandedChapters([nextId]);
+
+      setTimeout(() => {
+        const el = document.getElementById(`chapter-${nextId}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    } else {
+      alert("Course Completed! Check your library for the final grade.");
+    }
+  };
+
+  const handleQuizCompletion = async (
+    chapterId: number,
+    chapterTitle: string,
+    chapterContent: string,
+    chapterQuizLength: number,
+    result: { score: number; wrongQuestions: QuizQuestion[]; answers: QuizAnswer[] }
+  ) => {
+    if (!currentCourse) return;
+    const { score, wrongQuestions, answers } = result;
+    const mastered = wrongQuestions.length === 0;
+
+    setQuizHistory(prev => {
+      const courseHistory = prev[currentCourse.course_id] || {};
+      return {
+        ...prev,
+        [currentCourse.course_id]: {
+          ...courseHistory,
+          [chapterId]: answers,
+        }
+      };
+    });
+
+    updateCourseProgress(
+      currentCourse.course_id,
+      chapterId,
+      mastered ? chapterQuizLength : score
+    );
+
+    if (mastered) {
+      setRemediations(prev => {
+        const next = { ...prev };
+        delete next[chapterId];
+        return next;
+      });
+      return;
+    }
+
+    setRemediationLoading(prev => ({ ...prev, [chapterId]: true }));
+    try {
+      const remediation = await generateRemediation({
+        courseTitle: currentCourse.title,
+        chapterTitle,
+        chapterContent,
+        missedQuestions: wrongQuestions,
+        userContext: user?.aboutMe || '',
+      });
+      setRemediations(prev => ({ ...prev, [chapterId]: remediation }));
+    } catch (err) {
+      console.error(err);
+      alert("Unable to generate remediation for this chapter. Please try again.");
+    } finally {
+      setRemediationLoading(prev => ({ ...prev, [chapterId]: false }));
+    }
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -140,14 +262,23 @@ export default function SignalApp() {
     try {
       let newCourse: Course;
       
-      if (query.toLowerCase() === 'test') {
-        await new Promise(r => setTimeout(r, 2000));
-        newCourse = { ...MOCK_COURSE, course_id: `demo-${Date.now()}`, createdAt: new Date().toISOString() };
-      } else {
-        // PASS USER CONTEXT HERE
-        const data = await generateCourse(query, user?.aboutMe || "");
-        newCourse = { ...data, createdAt: new Date().toISOString() };
-      }
+    if (query.toLowerCase() === 'test') {
+      await new Promise(r => setTimeout(r, 2000));
+      newCourse = { 
+        ...MOCK_COURSE, 
+        course_id: `demo-${crypto.randomUUID()}`, // Use crypto for uniqueness
+        createdAt: new Date().toISOString() 
+      };
+    } else {
+      // API Call
+      const data = await generateCourse(query, user?.aboutMe || "");
+      
+      newCourse = { 
+        ...data, 
+        course_id: crypto.randomUUID(), // <--- FORCE UNIQUE ID HERE
+        createdAt: new Date().toISOString() 
+      };
+    }
 
       // ADD TO END OF LIST (Underneath)
       setCourses(prev => [...prev, newCourse]); 
@@ -327,21 +458,37 @@ export default function SignalApp() {
 
                     <div className="space-y-4">
                       {currentCourse.chapters.map((chapter) => {
-                         const isActive = activeChapterId === chapter.id;
+                         const isExpanded = expandedChapters.includes(chapter.id) || activeChapterId === chapter.id;
+                         const chapterScore = activeCourseProgress?.quizScores?.[chapter.id];
+                         const knowledgePercent = typeof chapterScore === 'number'
+                           ? Math.round((chapterScore / Math.max(1, chapter.quiz.length)) * 100)
+                           : 0;
                          return (
                            <motion.div 
                              key={chapter.id}
-                             onClick={() => setActiveChapterId(chapter.id)}
-                             className={`rounded-2xl border cursor-pointer transition-all overflow-hidden ${isActive ? 'bg-neutral-800 border-emerald-500/50' : 'bg-neutral-900 border-neutral-800 hover:bg-neutral-800'}`}
+                             id={`chapter-${chapter.id}`}
+                             onClick={(e) => {
+                               const target = e.target as HTMLElement;
+                               if (target.closest('[data-chapter-body="true"]')) return;
+                               toggleChapter(chapter.id);
+                             }}
+                             className={`rounded-2xl border cursor-pointer transition-all overflow-hidden ${isExpanded ? 'bg-neutral-800 border-emerald-500/50' : 'bg-neutral-900 border-neutral-800 hover:bg-neutral-800'}`}
                            >
                              <div className="p-6">
-                               <h3 className={`text-xl font-bold ${isActive ? 'text-white' : 'text-neutral-400'}`}>
-                                 {chapter.id}. {chapter.title}
-                               </h3>
+                               <div className="flex items-center justify-between gap-3">
+                                 <h3 className={`text-xl font-bold ${isExpanded ? 'text-white' : 'text-neutral-400'}`}>
+                                   {chapter.id}. {chapter.title}
+                                 </h3>
+                                 <div className="flex items-center gap-2 text-xs">
+                                   <span className="text-neutral-500">Knowledge Check</span>
+                                   <span className="px-2 py-1 rounded-full bg-white/10 text-white font-semibold">{knowledgePercent}%</span>
+                                   <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90 text-emerald-400' : 'text-neutral-500'}`} />
+                                 </div>
+                               </div>
                                <AnimatePresence>
-                                 {isActive && (
+                                 {isExpanded && (
                                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}>
-                                      <div className="pt-6 text-neutral-300 prose prose-invert max-w-none cursor-auto" onClick={e => e.stopPropagation()}>
+                                     <div data-chapter-body="true" className="pt-6 text-neutral-300 prose prose-invert max-w-none cursor-auto" onClick={e => e.stopPropagation()}>
                                          <ReactMarkdown>{chapter.content_markdown}</ReactMarkdown>
                                          
                                          <div className="mt-8 pt-8 border-t border-white/5">
@@ -350,26 +497,125 @@ export default function SignalApp() {
                                             </div>
                                             <QuizPlayer 
                                                questions={chapter.quiz}
-                                               onComplete={(score) => {
-                                                  // 1. Save Progress
-                                                  updateCourseProgress(currentCourse.course_id, chapter.id, score); 
-                                                  
-                                                  // 2. Advance to Next Chapter
-                                                  const idx = currentCourse.chapters.findIndex(c => c.id === chapter.id);
-                                                  if (idx < currentCourse.chapters.length - 1) {
-                                                     const nextId = currentCourse.chapters[idx + 1].id;
-                                                     setActiveChapterId(nextId);
-                                                     
-                                                     // Optional: Smooth scroll to the next chapter
-                                                     setTimeout(() => {
-                                                       const el = document.getElementById(`chapter-${nextId}`);
-                                                       el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                     }, 300);
-                                                  } else {
-                                                     alert("Course Completed! Check your library for the final grade.");
+                                               onComplete={async (result) => {
+                                                  await handleQuizCompletion(
+                                                    chapter.id,
+                                                    chapter.title,
+                                                    chapter.content_markdown,
+                                                    chapter.quiz.length,
+                                                    result
+                                                  );
+
+                                                  if (result.wrongQuestions.length === 0) {
+                                                   advanceToNextChapter(chapter.id);
                                                   }
                                                }}
                                             />
+                                            {quizHistory[currentCourse.course_id]?.[chapter.id] && (
+                                              <div className="mt-4 p-4 rounded-lg bg-neutral-900/70 border border-white/5">
+                                                <div className="text-sm font-semibold text-white mb-3">Your last answers</div>
+                                                <div className="space-y-3">
+                                                  {quizHistory[currentCourse.course_id][chapter.id].map((entry, idx) => {
+                                                    const correctText = entry.question.options[entry.question.correct_answer] ?? '';
+                                                    const chosen = typeof entry.selectedOption === 'number' ? entry.question.options[entry.selectedOption] : 'No answer';
+                                                    return (
+                                                      <div key={idx} className="text-sm text-neutral-300 border-b border-white/5 pb-2 last:border-b-0 last:pb-0">
+                                                        <div className="font-medium text-white mb-1">{idx + 1}. {entry.question.question}</div>
+                                                        <div className="text-xs">
+                                                          <span className={`font-semibold ${entry.isCorrect ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                            {entry.isCorrect ? 'Correct' : 'Incorrect'}
+                                                          </span>
+                                                          <span className="text-neutral-500"> — You chose: </span>
+                                                          <span className="text-white">{chosen}</span>
+                                                        </div>
+                                                        {!entry.isCorrect && (
+                                                          <div className="mt-2">
+                                                            <button
+                                                              className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+                                                              onClick={async () => {
+                                                                setQuestionInsightLoading(prev => ({
+                                                                  ...prev,
+                                                                  [chapter.id]: { ...(prev[chapter.id] || {}), [idx]: true }
+                                                                }));
+                                                                try {
+                                                                  const insight = await generateQuestionInsight({
+                                                                    courseTitle: currentCourse.title,
+                                                                    chapterTitle: chapter.title,
+                                                                    question: entry.question,
+                                                                    userContext: user?.aboutMe || ''
+                                                                  });
+                                                                  setQuestionInsights(prev => ({
+                                                                    ...prev,
+                                                                    [chapter.id]: {
+                                                                      ...(prev[chapter.id] || {}),
+                                                                      [idx]: insight.explanation_markdown
+                                                                    }
+                                                                  }));
+                                                                } catch (e) {
+                                                                  console.error(e);
+                                                                  alert("Couldn't fetch more info for this question right now.");
+                                                                } finally {
+                                                                  setQuestionInsightLoading(prev => ({
+                                                                    ...prev,
+                                                                    [chapter.id]: { ...(prev[chapter.id] || {}), [idx]: false }
+                                                                  }));
+                                                                }
+                                                              }}
+                                                            >
+                                                              Tell me more
+                                                            </button>
+                                                            {questionInsightLoading[chapter.id]?.[idx] && (
+                                                              <span className="ml-2 text-xs text-neutral-400">Loading…</span>
+                                                            )}
+                                                            {questionInsights[chapter.id]?.[idx] && (
+                                                              <div className="mt-2 prose prose-invert text-neutral-200 max-w-none">
+                                                                <ReactMarkdown>{questionInsights[chapter.id][idx]}</ReactMarkdown>
+                                                              </div>
+                                                            )}
+                                                          </div>
+                                                        )}
+                                                        {!entry.isCorrect && (
+                                                          <div className="text-xs text-neutral-500 mt-1">
+                                                            Correct answer: <span className="text-white">{correctText}</span>
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              </div>
+                                            )}
+                                            {remediationLoading[chapter.id] && (
+                                              <div className="mt-4 text-sm text-neutral-400">Building a focused review...</div>
+                                            )}
+                                            {remediations[chapter.id] && (
+                                              <div className="mt-6 p-5 rounded-xl border border-white/10 bg-neutral-800/60">
+                                                <div className="flex items-center justify-between mb-3">
+                                                  <span className="text-sm font-semibold text-white">Targeted Review</span>
+                                                  <span className="text-xs text-neutral-400">Missed concepts</span>
+                                                </div>
+                                                <div className="prose prose-invert text-neutral-300 max-w-none">
+                                                  <ReactMarkdown>{remediations[chapter.id].explanation_markdown}</ReactMarkdown>
+                                                </div>
+                                                <div className="mt-4">
+                                                  <QuizPlayer
+                                                    questions={remediations[chapter.id].quiz}
+                                                    onComplete={async (result) => {
+                                                      await handleQuizCompletion(
+                                                        chapter.id,
+                                                        chapter.title,
+                                                        chapter.content_markdown,
+                                                        chapter.quiz.length,
+                                                        result
+                                                      );
+                                                      if (result.wrongQuestions.length === 0) {
+                                                        advanceToNextChapter(chapter.id);
+                                                      }
+                                                    }}
+                                                  />
+                                                </div>
+                                              </div>
+                                            )}
                                          </div>
                                       </div>
                                    </motion.div>

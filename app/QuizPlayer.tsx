@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
-import { QuizQuestion } from './types';
+import { QuizQuestion, QuizAnswer } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface QuizPlayerProps {
   questions: QuizQuestion[];
-  onComplete: (score: number) => void; // <--- CHANGED signature
+  onComplete: (result: { score: number; wrongQuestions: QuizQuestion[]; answers: QuizAnswer[] }) => void;
 }
 
 export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
@@ -16,12 +16,25 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
+  const [answers, setAnswers] = useState<(boolean | null)[]>(() => Array(questions.length).fill(null));
+  const [selectedOptions, setSelectedOptions] = useState<(number | null)[]>(() => Array(questions.length).fill(null));
 
   const currentQuestion = questions[currentIndex];
 
   const handleCheck = () => {
     if (selectedOption === null) return;
     setIsAnswered(true);
+    const isCorrect = selectedOption === currentQuestion.correct_answer;
+    setAnswers(prev => {
+      const next = [...prev];
+      next[currentIndex] = isCorrect;
+      return next;
+    });
+    setSelectedOptions(prev => {
+      const next = [...prev];
+      next[currentIndex] = selectedOption;
+      return next;
+    });
     if (selectedOption === currentQuestion.correct_answer) {
       setScore(s => s + 1);
     }
@@ -43,11 +56,24 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
     setIsAnswered(false);
     setScore(0);
     setShowSummary(false);
+    setAnswers(Array(questions.length).fill(null));
+    setSelectedOptions(Array(questions.length).fill(null));
   };
+
+  // Reset state when the question set changes (e.g., remediation quiz)
+  useEffect(() => {
+    resetQuiz();
+  }, [questions]);
 
   // --- SUMMARY VIEW ---
   if (showSummary) {
     const passed = score >= Math.ceil(questions.length / 2);
+    const wrongQuestions = questions.filter((_, idx) => answers[idx] !== true);
+    const answerPayload: QuizAnswer[] = questions.map((q, idx) => ({
+      question: q,
+      selectedOption: selectedOptions[idx],
+      isCorrect: answers[idx] === true
+    }));
     return (
       <div className="bg-neutral-800/50 rounded-xl p-8 text-center space-y-4 border border-white/10">
         <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${passed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -63,7 +89,7 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
           
           {/* FIX: Ensure this calls onComplete with the score */}
           <button 
-            onClick={() => onComplete(score)} 
+            onClick={() => onComplete({ score, wrongQuestions, answers: answerPayload })} 
             className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 transition text-white text-sm font-semibold"
           >
             Continue Course

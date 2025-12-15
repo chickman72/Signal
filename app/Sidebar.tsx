@@ -57,6 +57,7 @@ export default function Sidebar({
             <button
               key={course.course_id}
               onClick={() => onSelectCourse(course)}
+              title={course.title}
               className={`w-full text-left p-3 rounded-xl transition-all group relative overflow-hidden flex-shrink-0
                 ${isActive ? 'bg-white/10 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-200'}
               `}

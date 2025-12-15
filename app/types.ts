@@ -6,6 +6,12 @@ export interface QuizQuestion {
   correct_answer: number;
 }
 
+export interface QuizAnswer {
+  question: QuizQuestion;
+  selectedOption: number | null;
+  isCorrect: boolean;
+}
+
 export interface Chapter {
   id: number;
   title: string;

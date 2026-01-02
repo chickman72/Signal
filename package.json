@@ -2,12 +2,14 @@
   "name": "oboe-clone",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": ">=20.9.0" },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
+  },
+  "engines": {
+    "node": "20.x"
   },
   "dependencies": {
     "framer-motion": "^12.23.26",

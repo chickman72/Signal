@@ -15,6 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and Deploy Job
     steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.9.0'
       - uses: actions/checkout@v3
         with:
           submodules: true
@@ -44,3 +48,4 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SAND_0C4980210 }}
           action: "close"
+

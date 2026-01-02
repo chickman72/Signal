@@ -19,6 +19,7 @@ export interface Chapter {
   content_markdown: string;
   audio_script: string;
   quiz: QuizQuestion[];
+  flashcards: any[];     // or use a specific flashcard type if available
 }
 
 export interface VerificationResult {

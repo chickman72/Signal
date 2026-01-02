@@ -12,6 +12,13 @@ export interface QuizAnswer {
   isCorrect: boolean;
 }
 
+export interface Flashcard {
+  id?: string | number;
+  front: string;
+  back: string;
+  hint?: string;
+}
+
 export interface Chapter {
   id: number;
   title: string;
@@ -19,7 +26,7 @@ export interface Chapter {
   content_markdown: string;
   audio_script: string;
   quiz: QuizQuestion[];
-  flashcards: any[];     // or use a specific flashcard type if available
+  flashcards?: Flashcard[];
 }
 
 export interface VerificationResult {

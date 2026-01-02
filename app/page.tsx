@@ -465,7 +465,7 @@ export default function SignalApp() {
                        <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">{currentCourse.style} COURSE</span>
                        <div className={`mt-3 inline-flex items-start gap-3 rounded-xl border px-4 py-3 ${trustStyle.bg} ${trustStyle.border}`}>
                          <div className={`flex h-10 w-10 items-center justify-center rounded-full border ${trustStyle.border} bg-black/20`}>
-                           {React.cloneElement(trustStyle.icon as React.ReactElement, { className: `w-5 h-5 ${trustStyle.text}` })}
+                           {React.cloneElement(trustStyle.icon as React.ReactElement<any>, { className: `w-5 h-5 ${trustStyle.text}` })}
                          </div>
                          <div className="flex flex-col gap-1">
                            <div className="flex items-center gap-2">

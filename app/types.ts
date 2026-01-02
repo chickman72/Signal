@@ -21,6 +21,12 @@ export interface Chapter {
   quiz: QuizQuestion[];
 }
 
+export interface VerificationResult {
+  status: 'VERIFIED' | 'CAUTION' | 'FLAGGED';
+  score: number;
+  notes: string;
+}
+
 // NEW: Track the user's progress for a specific saved course
 export interface CourseProgress {
   totalChapters: number;
@@ -38,6 +44,9 @@ export interface Course {
   // Merge progress directly into the course object for easier UI handling
   progress?: CourseProgress; 
   createdAt?: string;
+  verification?: VerificationResult;
+  originalVerification?: VerificationResult;
+  wasRefined?: boolean;
 }
 
 export interface User {

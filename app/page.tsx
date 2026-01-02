@@ -2,13 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, ChevronRight, BookOpen, Brain, CheckCircle, Menu, Lock, X, Save } from 'lucide-react';
+import { Play, Pause, ChevronRight, BookOpen, Brain, CheckCircle, Menu, Lock, X, Save, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { generateCourse, generateRemediation, generateQuestionInsight } from './actions';
-import { Course, AppState, User, QuizQuestion, QuizAnswer } from './types';
+import { Course, AppState, User, QuizQuestion, QuizAnswer, VerificationResult } from './types';
 import QuizPlayer from './QuizPlayer';
 import Sidebar from './Sidebar';
 import { MOCK_COURSE } from './mockData';
+
+const TRUST_STYLE_MAP: Record<VerificationResult['status'], { bg: string; border: string; text: string; icon: React.ReactNode }> = {
+  VERIFIED: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-300', icon: <CheckCircle className="w-5 h-5" /> },
+  CAUTION: { bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-300', icon: <AlertTriangle className="w-5 h-5" /> },
+  FLAGGED: { bg: 'bg-rose-500/10', border: 'border-rose-500/40', text: 'text-rose-300', icon: <AlertTriangle className="w-5 h-5" /> },
+};
 
 export default function SignalApp() {
   // --- STATE ---
@@ -42,6 +48,15 @@ export default function SignalApp() {
   const activeCourseProgress = currentCourse
     ? courses.find(c => c.course_id === currentCourse.course_id)?.progress
     : undefined;
+
+  const currentVerification = currentCourse?.verification;
+  const trustStatus: VerificationResult['status'] = currentVerification?.status ?? 'CAUTION';
+  const trustStyle = TRUST_STYLE_MAP[trustStatus];
+  const trustScore = typeof currentVerification?.score === 'number' ? Math.round(currentVerification.score) : 0;
+  const trustNotes = currentVerification?.notes || 'Automated safety review pending.';
+  const originalVerification = currentCourse?.originalVerification || currentVerification;
+  const initialScore = typeof originalVerification?.score === 'number' ? Math.round(originalVerification.score) : trustScore;
+  const initialNotes = originalVerification?.notes;
 
   // --- PERSISTENCE ---
   useEffect(() => {
@@ -448,6 +463,43 @@ export default function SignalApp() {
                  <motion.div key="play" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="mb-12 border-b border-white/10 pb-8">
                        <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">{currentCourse.style} COURSE</span>
+                       <div className={`mt-3 inline-flex items-start gap-3 rounded-xl border px-4 py-3 ${trustStyle.bg} ${trustStyle.border}`}>
+                         <div className={`flex h-10 w-10 items-center justify-center rounded-full border ${trustStyle.border} bg-black/20`}>
+                           {React.cloneElement(trustStyle.icon as React.ReactElement, { className: `w-5 h-5 ${trustStyle.text}` })}
+                         </div>
+                         <div className="flex flex-col gap-1">
+                           <div className="flex items-center gap-2">
+                             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Trust Signal</div>
+                             {currentCourse.wasRefined && (
+                               <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                 Refined
+                               </span>
+                             )}
+                           </div>
+                           {currentCourse.wasRefined ? (
+                             <>
+                               <div className="flex items-center gap-2 flex-wrap">
+                                 <span className="text-sm text-neutral-400 line-through">Initial {initialScore}%</span>
+                                 <span className="text-neutral-500 text-xs">-&gt;</span>
+                                 <span className="text-2xl font-bold text-white">{trustScore}%</span>
+                                 <span className={`text-sm font-semibold ${trustStyle.text}`}>{trustStatus}</span>
+                               </div>
+                               <p className="text-xs text-neutral-200 leading-snug">Final: {trustNotes}</p>
+                               {initialNotes && (
+                                 <p className="text-[11px] text-neutral-500 leading-snug">Initial: {initialNotes}</p>
+                               )}
+                             </>
+                           ) : (
+                             <>
+                               <div className="flex items-baseline gap-2">
+                                 <span className="text-2xl font-bold text-white">{trustScore}%</span>
+                                 <span className={`text-sm font-semibold ${trustStyle.text}`}>{trustStatus}</span>
+                               </div>
+                               <p className="text-xs text-neutral-200 leading-snug">{trustNotes}</p>
+                             </>
+                           )}
+                         </div>
+                       </div>
                        <h2 className="text-4xl font-bold mt-2">{currentCourse.title}</h2>
                        <div className="mt-4 flex items-center gap-4 text-sm text-neutral-400">
                           <span>{currentCourse.chapters.length} Chapters</span>

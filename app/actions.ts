@@ -1,13 +1,87 @@
 'use server'
 
 import OpenAI from 'openai';
-import { Course, QuizQuestion } from './types';
+import { Course, QuizQuestion, VerificationResult } from './types';
 
 // Initialize OpenAI / LiteLLM
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   baseURL: "https://proxy-ai-anes-uabmc-awefchfueccrddhf.eastus2-01.azurewebsites.net/" 
 });
+
+async function verifyCourseContent(course: Course): Promise<VerificationResult> {
+  const chapterDigest = course.chapters.map(ch => {
+    const truncatedContent = ch.content_markdown.slice(0, 1200);
+    return `- ${ch.title}: ${ch.summary}\nKey claims: ${truncatedContent}`;
+  }).join('\n\n');
+
+  const systemPrompt = `
+    You are a Senior Medical Safety Officer reviewing educational material for hallucinations, unsafe advice, or unsupported medical claims.
+    Evaluate accuracy, clinical safety, and clarity. If anything is questionable or missing evidence, err on caution.
+    Respond ONLY with strict JSON matching:
+    {
+      "status": "VERIFIED" | "CAUTION" | "FLAGGED",
+      "score": number, // 0-100 confidence in safety/accuracy
+      "notes": "concise rationale; cite risks or confidence drivers"
+    }
+    Do not include any extra keys, explanations, or prose outside the JSON object.
+  `;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-nano",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { 
+          role: "user", 
+          content: `Course Title: ${course.title}\nStyle: ${course.style}\nChapters:\n${chapterDigest}`
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const content = completion.choices[0].message.content;
+    if (!content) throw new Error("No verification result returned");
+
+    const parsed = JSON.parse(content) as VerificationResult;
+    return parsed;
+  } catch (error) {
+    console.error("Course verification failed:", error);
+    return {
+      status: 'CAUTION',
+      score: 0,
+      notes: 'Verification unavailable. Please review manually.'
+    };
+  }
+}
+
+async function refineCourseContent(course: Course, feedback: VerificationResult): Promise<Course> {
+  const systemPrompt = `
+    You are an Expert Medical Editor. The content below was flagged.
+    FEEDBACK: ${feedback.notes}
+    INSTRUCTION: Rewrite the flagged sections to address issues while maintaining JSON structure.
+    Respond ONLY with the full course JSON, preserving schema and field names.
+  `;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-nano",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Original course JSON:\n${JSON.stringify(course)}` },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const content = completion.choices[0].message.content;
+    if (!content) throw new Error("No refinement result returned");
+
+    return JSON.parse(content) as Course;
+  } catch (error) {
+    console.error("Course refinement failed:", error);
+    return course;
+  }
+}
 
 // Update function signature to accept userContext
 export async function generateCourse(userTopic: string, userContext: string = ""): Promise<Course> {
@@ -61,7 +135,27 @@ export async function generateCourse(userTopic: string, userContext: string = ""
     const content = completion.choices[0].message.content;
     if (!content) throw new Error("No content generated");
 
-    return JSON.parse(content) as Course;
+    const course = JSON.parse(content) as Course;
+    const initialResult = await verifyCourseContent(course);
+
+    if (initialResult.score < 90) {
+      const refinedCourse = await refineCourseContent(course, initialResult);
+      const finalResult = await verifyCourseContent(refinedCourse);
+
+      return { 
+        ...refinedCourse, 
+        verification: finalResult, 
+        originalVerification: initialResult,
+        wasRefined: true 
+      };
+    }
+
+    return { 
+      ...course, 
+      verification: initialResult, 
+      originalVerification: initialResult,
+      wasRefined: false 
+    };
 
   } catch (error) {
     console.error("Course generation failed:", error);

@@ -92,6 +92,7 @@ export interface ActivityLogEntry {
   courseId?: string;
   chapterId?: number;
   latencyMs?: number;
+  quizEntries?: number;
   success?: boolean;
   clientMeta?: Record<string, any>;
 }

@@ -55,6 +55,8 @@ export interface Course {
   verification?: VerificationResult;
   originalVerification?: VerificationResult;
   wasRefined?: boolean;
+   // Persisted quiz answers per chapter
+  quizHistory?: Record<number, QuizAnswer[]>;
 }
 
 export interface User {
@@ -63,3 +65,34 @@ export interface User {
 }
 
 export type AppState = 'AUTH' | 'IDLE' | 'GENERATING' | 'PLAYING';
+
+// Activity logging types for Cosmos
+export type ActivityEventType =
+  | 'login'
+  | 'signup'
+  | 'logout'
+  | 'profile_update'
+  | 'search'
+  | 'generate_course'
+  | 'verification'
+  | 'refinement'
+  | 'quiz_submit'
+  | 'remediation_request'
+  | 'question_insight'
+  | 'error';
+
+export interface ActivityLogEntry {
+  id: string;
+  user?: string;
+  eventType: ActivityEventType;
+  request?: Record<string, any>;
+  response?: Record<string, any>;
+  timestamp: string;
+  sessionId?: string;
+  courseId?: string;
+  chapterId?: number;
+  latencyMs?: number;
+  quizEntries?: number;
+  success?: boolean;
+  clientMeta?: Record<string, any>;
+}

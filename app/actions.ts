@@ -2,6 +2,7 @@
 
 import OpenAI from 'openai';
 import { Course, QuizQuestion, VerificationResult } from './types';
+import { logEvent } from './dbActions';
 
 // Initialize OpenAI / LiteLLM
 const openai = new OpenAI({
@@ -84,7 +85,7 @@ async function refineCourseContent(course: Course, feedback: VerificationResult)
 }
 
 // Update function signature to accept userContext
-export async function generateCourse(userTopic: string, userContext: string = ""): Promise<Course> {
+export async function generateCourse(userTopic: string, userContext: string = "", username?: string): Promise<Course> {
   if (!userTopic) throw new Error("Topic is required");
 
   // Incorporate the "About Me" context into the system prompt
@@ -123,6 +124,12 @@ export async function generateCourse(userTopic: string, userContext: string = ""
   `;
 
   try {
+    const started = Date.now();
+    await logEvent('generate_course', {
+      user: username,
+      request: { topic: userTopic, userContext }
+    });
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-nano", 
       messages: [
@@ -142,6 +149,14 @@ export async function generateCourse(userTopic: string, userContext: string = ""
       const refinedCourse = await refineCourseContent(course, initialResult);
       const finalResult = await verifyCourseContent(refinedCourse);
 
+      await logEvent('refinement', {
+        user: username,
+        courseId: refinedCourse.course_id,
+        latencyMs: Date.now() - started,
+        request: { topic: userTopic },
+        response: { verification: finalResult, originalVerification: initialResult }
+      });
+
       return { 
         ...refinedCourse, 
         verification: finalResult, 
@@ -149,6 +164,13 @@ export async function generateCourse(userTopic: string, userContext: string = ""
         wasRefined: true 
       };
     }
+
+    await logEvent('verification', {
+      user: username,
+      courseId: course.course_id,
+      latencyMs: Date.now() - started,
+      response: { verification: initialResult }
+    });
 
     return { 
       ...course, 
@@ -158,6 +180,12 @@ export async function generateCourse(userTopic: string, userContext: string = ""
     };
 
   } catch (error) {
+    await logEvent('error', {
+      user: username,
+      request: { topic: userTopic },
+      success: false,
+      response: { message: 'Course generation failed', error: String(error) }
+    });
     console.error("Course generation failed:", error);
     throw new Error("Failed to generate course.");
   }
@@ -169,10 +197,11 @@ interface RemediationRequest {
   chapterContent: string;
   missedQuestions: QuizQuestion[];
   userContext?: string;
+  username?: string;
 }
 
 export async function generateRemediation(request: RemediationRequest): Promise<{ explanation_markdown: string; quiz: QuizQuestion[] }> {
-  const { courseTitle, chapterTitle, chapterContent, missedQuestions, userContext = "" } = request;
+  const { courseTitle, chapterTitle, chapterContent, missedQuestions, userContext = "", username } = request;
 
   const missedList = missedQuestions.map((q, idx) => {
     const correctOption = q.options[q.correct_answer] ?? "";
@@ -197,6 +226,18 @@ export async function generateRemediation(request: RemediationRequest): Promise<
   `;
 
   try {
+    const started = Date.now();
+    await logEvent('remediation_request', {
+      user: username,
+      courseId: undefined,
+      chapterId: undefined,
+      request: {
+        courseTitle,
+        chapterTitle,
+        missed: missedQuestions.length
+      }
+    });
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-nano",
       messages: [
@@ -209,8 +250,27 @@ export async function generateRemediation(request: RemediationRequest): Promise<
     const content = completion.choices[0].message.content;
     if (!content) throw new Error("No remediation generated");
 
-    return JSON.parse(content) as { explanation_markdown: string; quiz: QuizQuestion[] };
+    const parsed = JSON.parse(content) as { explanation_markdown: string; quiz: QuizQuestion[] };
+
+    await logEvent('remediation_request', {
+      user: username,
+      latencyMs: Date.now() - started,
+      request: {
+        courseTitle,
+        chapterTitle,
+        missed: missedQuestions.length
+      },
+      response: { generatedQuiz: parsed.quiz?.length ?? 0 }
+    });
+
+    return parsed;
   } catch (error) {
+    await logEvent('error', {
+      user: username,
+      success: false,
+      request: { courseTitle, chapterTitle, missed: missedQuestions.length },
+      response: { message: 'Failed to generate remediation', error: String(error) }
+    });
     console.error("Remediation generation failed:", error);
     throw new Error("Failed to generate remediation.");
   }
@@ -221,10 +281,11 @@ interface QuestionInsightRequest {
   chapterTitle: string;
   question: QuizQuestion;
   userContext?: string;
+  username?: string;
 }
 
 export async function generateQuestionInsight(request: QuestionInsightRequest): Promise<{ explanation_markdown: string }> {
-  const { courseTitle, chapterTitle, question, userContext = "" } = request;
+  const { courseTitle, chapterTitle, question, userContext = "", username } = request;
 
   const correctOption = question.options[question.correct_answer] ?? "";
   const systemPrompt = `
@@ -236,6 +297,12 @@ export async function generateQuestionInsight(request: QuestionInsightRequest): 
   `;
 
   try {
+    const started = Date.now();
+    await logEvent('question_insight', {
+      user: username,
+      request: { courseTitle, chapterTitle, question: question.question }
+    });
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-nano",
       messages: [
@@ -246,11 +313,30 @@ export async function generateQuestionInsight(request: QuestionInsightRequest): 
     const content = completion.choices[0].message.content;
     if (!content) throw new Error("No explanation generated");
     try {
-      return JSON.parse(content) as { explanation_markdown: string };
+      const parsed = JSON.parse(content) as { explanation_markdown: string };
+      await logEvent('question_insight', {
+        user: username,
+        latencyMs: Date.now() - started,
+        request: { courseTitle, chapterTitle, question: question.question },
+        response: { success: true }
+      });
+      return parsed;
     } catch {
+      await logEvent('question_insight', {
+        user: username,
+        latencyMs: Date.now() - started,
+        request: { courseTitle, chapterTitle, question: question.question },
+        response: { success: true, parsedAs: 'string' }
+      });
       return { explanation_markdown: content };
     }
   } catch (error) {
+    await logEvent('error', {
+      user: username,
+      success: false,
+      request: { courseTitle, chapterTitle, question: question.question },
+      response: { message: 'Failed to generate question insight', error: String(error) }
+    });
     console.error("Question insight generation failed:", error);
     throw new Error("Failed to generate question insight.");
   }

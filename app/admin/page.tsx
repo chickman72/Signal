@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getCoursesContainer, getLogsContainer } from "../lib/db";
 import UserInsights from "./UserInsights";
 import { ActivityLogEntry } from "../types";
@@ -29,6 +31,29 @@ async function fetchRecentCourses() {
 }
 
 export default async function AdminDashboard() {
+  const hasCosmosConfig =
+    Boolean(process.env.COSMOS_ENDPOINT) && Boolean(process.env.COSMOS_KEY);
+
+  if (!hasCosmosConfig) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-white flex items-center justify-center px-6">
+        <div className="max-w-2xl rounded-3xl border border-white/10 bg-white/5 p-8 text-center space-y-4">
+          <p className="text-sm uppercase tracking-[0.3em] text-neutral-500">
+            Admin Console
+          </p>
+          <h1 className="text-3xl font-semibold">
+            Cosmos DB credentials are missing
+          </h1>
+          <p className="text-sm text-neutral-400">
+            Set <code className="rounded bg-black/40 px-1 text-white">COSMOS_ENDPOINT</code> and{" "}
+            <code className="rounded bg-black/40 px-1 text-white">COSMOS_KEY</code> in your
+            deployment environment before running the admin dashboard.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const [logs, courses] = await Promise.all([fetchRecentLogs(), fetchRecentCourses()]);
   const userSummaries = ensureUserSummaries(logs, courses).sort((a, b) => {
     const left = b.lastLoginMs ?? 0;

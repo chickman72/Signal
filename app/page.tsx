@@ -5,10 +5,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, ChevronRight, BookOpen, Brain, CheckCircle, Menu, Lock, X, Save, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { generateCourse, generateRemediation, generateQuestionInsight } from './actions';
-import { Course, AppState, User, QuizQuestion, QuizAnswer, VerificationResult } from './types';
+import { Course, AppState, User, QuizQuestion, QuizAnswer, VerificationResult, CourseProgress } from './types';
 import QuizPlayer from './QuizPlayer';
 import Sidebar from './Sidebar';
 import { MOCK_COURSE } from './mockData';
+import { loginUser, signupUser, updateUserProfile as updateUserProfileServer } from './dbActions';
+
+const safeRandomId = () => {
+  const g: any = typeof globalThis !== 'undefined' ? globalThis : undefined;
+  if (g?.crypto?.randomUUID) {
+    try {
+      return g.crypto.randomUUID();
+    } catch {
+      // ignore and fallback
+    }
+  }
+  return `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+};
 
 const TRUST_STYLE_MAP: Record<VerificationResult['status'], { bg: string; border: string; text: string; icon: React.ReactNode }> = {
   VERIFIED: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-300', icon: <CheckCircle className="w-5 h-5" /> },
@@ -40,6 +53,37 @@ export default function SignalApp() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false); // <--- NEW MODAL STATE
+  const [sessionId] = useState(() => safeRandomId());
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
+  const [signupAbout, setSignupAbout] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  const fetchUserCourses = async (username: string) => {
+    const res = await fetch(`/api/courses?username=${encodeURIComponent(username)}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.error || 'Failed to load courses');
+    }
+    const data = await res.json();
+    return (data.courses || []) as Course[];
+  };
+
+  const persistCourse = async (course: Course, username: string) => {
+
+    const res = await fetch('/api/courses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ course, username })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to save course');
+    }
+
+
+    return data.saved ?? null;
+  };
 
   // Profile Edit Inputs
   const [editName, setEditName] = useState('');
@@ -61,19 +105,46 @@ export default function SignalApp() {
   // --- PERSISTENCE ---
   useEffect(() => {
     const savedUser = localStorage.getItem('signal_user');
-    const savedCourses = localStorage.getItem('signal_courses');
     
     if (savedUser) {
       const u = JSON.parse(savedUser);
-      setUser(u);
-      setEditName(u.username);
-      setEditAbout(u.aboutMe || '');
-      setAppState('IDLE');
-    }
-    if (savedCourses) {
-      setCourses(JSON.parse(savedCourses));
+      (async () => {
+        try {
+          const fresh = await loginUser(u.username);
+          setUser(fresh);
+          setEditName(fresh.username);
+          setEditAbout(fresh.aboutMe || '');
+          const userCourses = await fetchUserCourses(fresh.username);
+          setCourses(userCourses);
+
+          // Keep the library closed and let the user choose a course manually.
+          setAppState('IDLE');
+
+          const history = userCourses.reduce((acc, c) => {
+            if (c.quizHistory) {
+              acc[c.course_id] = c.quizHistory;
+            }
+            return acc;
+          }, {} as Record<string, Record<number, QuizAnswer[]>>);
+          setQuizHistory(history);
+          localStorage.setItem('signal_courses', JSON.stringify(userCourses));
+        } catch (err) {
+          console.warn('Stored session invalid; please log in again.');
+          localStorage.removeItem('signal_user');
+          localStorage.removeItem('signal_courses');
+          setAppState('AUTH');
+        }
+      })();
+    } else {
+      setAppState('AUTH');
     }
   }, []);
+
+  useEffect(() => {
+    if (courses.length > 0) {
+      localStorage.setItem('signal_courses', JSON.stringify(courses));
+    }
+  }, [courses]);
 
   useEffect(() => {
     if (courses.length > 0) {
@@ -96,20 +167,74 @@ export default function SignalApp() {
     localStorage.setItem('signal_quiz_history', JSON.stringify(quizHistory));
   }, [quizHistory]);
 
+  const logClientEvent = async (eventType: string, entry: Record<string, any>) => {
+    try {
+      await fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType,
+          entry: {
+            ...entry,
+            user: user?.username ?? entry.user,
+            sessionId,
+            clientMeta: {
+              userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+            }
+          }
+        })
+      });
+    } catch (err) {
+      // Activity logging failures are non-blocking.
+    }
+  };
+
   // --- AUTH & PROFILE HANDLERS ---
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usernameInput.trim()) return;
-    const newUser = { username: usernameInput, aboutMe: '' };
-    setUser(newUser);
-    setEditName(newUser.username);
-    localStorage.setItem('signal_user', JSON.stringify(newUser));
-    setAppState('IDLE');
+    setAuthError('');
+    try {
+      let account: User;
+      if (authMode === 'SIGNUP') {
+        account = await signupUser(usernameInput.trim(), signupAbout);
+        logClientEvent('signup', { user: account.username });
+      } else {
+        account = await loginUser(usernameInput.trim());
+        logClientEvent('login', { user: account.username });
+      }
+
+      setUser(account);
+      setEditName(account.username);
+      setEditAbout(account.aboutMe || '');
+      localStorage.setItem('signal_user', JSON.stringify(account));
+
+      try {
+        const userCourses = await fetchUserCourses(account.username);
+        setCourses(userCourses);
+
+
+        const history = userCourses.reduce((acc, c) => {
+          if (c.quizHistory) acc[c.course_id] = c.quizHistory;
+          return acc;
+        }, {} as Record<string, Record<number, QuizAnswer[]>>);
+        setQuizHistory(history);
+        localStorage.setItem('signal_courses', JSON.stringify(userCourses));
+      } catch (err) {
+        console.warn('Unable to load saved courses', err);
+      }
+
+      setAppState('IDLE');
+    } catch (err: any) {
+      setAuthError(err?.message || 'Unable to authenticate. Please try again.');
+    }
   };
 
   const handleLogout = () => {
+    logClientEvent('logout', {});
     setUser(null);
     localStorage.removeItem('signal_user');
+    localStorage.removeItem('signal_courses');
     setAppState('AUTH');
     setCurrentCourse(null);
     setIsSidebarOpen(true);
@@ -117,10 +242,19 @@ export default function SignalApp() {
 
   const handleSaveProfile = () => {
     if (!user) return;
-    const updatedUser = { ...user, username: editName, aboutMe: editAbout };
-    setUser(updatedUser);
-    localStorage.setItem('signal_user', JSON.stringify(updatedUser));
-    setShowProfileModal(false);
+    const update = async () => {
+      try {
+        const updatedUser = await updateUserProfileServer(user.username, editAbout);
+        setUser(updatedUser);
+        localStorage.setItem('signal_user', JSON.stringify(updatedUser));
+        setShowProfileModal(false);
+        logClientEvent('profile_update', { user: updatedUser.username });
+      } catch (err) {
+        console.error(err);
+        alert('Unable to update profile right now.');
+      }
+    };
+    update();
   };
 
   // --- COURSE HANDLERS ---
@@ -140,9 +274,8 @@ export default function SignalApp() {
 
   const handleSelectCourse = (course: Course) => {
     setCurrentCourse(course);
-    const firstChapterId = course.chapters[0]?.id ?? null;
-    setActiveChapterId(firstChapterId);
-    setExpandedChapters(firstChapterId ? [firstChapterId] : []);
+    setActiveChapterId(null);
+    setExpandedChapters([]);
     setRemediations({});
     setRemediationLoading({});
     setQuestionInsights({});
@@ -151,32 +284,56 @@ export default function SignalApp() {
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
-  const updateCourseProgress = (courseId: string, chapterId: number, score: number) => {
-    setCourses(prevCourses => {
-      return prevCourses.map(c => {
-        if (c.course_id !== courseId) return c;
+  const updateCourseProgress = (
+    courseId: string,
+    chapterId: number,
+    score: number,
+    answers: QuizAnswer[],
+    chapterQuizLength: number
+  ) => {
+    const baseCourse = courses.find(c => c.course_id === courseId) || currentCourse;
+    if (!baseCourse) return null;
 
-        const prog = c.progress || { 
-          totalChapters: c.chapters.length, 
-          completedChapterIds: [], 
-          quizScores: {}, 
-          overallGrade: 0, 
-          percentComplete: 0 
-        };
+    const totalChapters = Math.max(baseCourse.chapters?.length || baseCourse.progress?.totalChapters || 0, 1);
+    const existingProgress = baseCourse.progress || {
+      totalChapters,
+      completedChapterIds: [],
+      quizScores: {},
+      overallGrade: 0,
+      percentComplete: 0
+    };
 
-        if (!prog.completedChapterIds.includes(chapterId)) {
-          prog.completedChapterIds.push(chapterId);
-        }
-        prog.quizScores[chapterId] = score;
+    const completedChapterIds = Array.from(new Set([...existingProgress.completedChapterIds, chapterId]));
+    const quizScores = { ...existingProgress.quizScores, [chapterId]: score };
 
-        prog.percentComplete = Math.round((prog.completedChapterIds.length / prog.totalChapters) * 100);
-        const totalScore = Object.values(prog.quizScores).reduce((a, b) => a + b, 0);
-        const maxPossibleScore = prog.completedChapterIds.length * 5; 
-        prog.overallGrade = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 100;
+    // Calculate totals based on actual quiz lengths instead of assuming 5 questions per chapter
+    const totalPossibleScore = completedChapterIds.reduce((acc, id) => {
+      const chapter = baseCourse.chapters.find(ch => ch.id === id);
+      return acc + (chapter?.quiz?.length ?? chapterQuizLength ?? 0);
+    }, 0);
+    const totalScore = Object.values(quizScores).reduce((a, b) => a + b, 0);
 
-        return { ...c, progress: prog };
-      });
-    });
+    const progress: CourseProgress = {
+      ...existingProgress,
+      totalChapters,
+      completedChapterIds,
+      quizScores,
+      percentComplete: Math.round((completedChapterIds.length / totalChapters) * 100),
+      overallGrade: totalPossibleScore > 0 ? Math.round((totalScore / totalPossibleScore) * 100) : 0
+    };
+
+    const updatedCourse: Course = {
+      ...baseCourse,
+      progress,
+      quizHistory: { ...(baseCourse.quizHistory || {}), [chapterId]: answers }
+    };
+
+    setCourses(prev =>
+      prev.map(c => (c.course_id === courseId ? updatedCourse : c))
+    );
+    setCurrentCourse(cur => (cur?.course_id === courseId ? updatedCourse : cur));
+
+    return updatedCourse;
   };
 
   const toggleChapter = (chapterId: number) => {
@@ -219,6 +376,14 @@ export default function SignalApp() {
     const { score, wrongQuestions, answers } = result;
     const mastered = wrongQuestions.length === 0;
 
+    logClientEvent('quiz_submit', {
+      courseId: currentCourse.course_id,
+      chapterId,
+      score,
+      mastered,
+      total: chapterQuizLength
+    });
+
     setQuizHistory(prev => {
       const courseHistory = prev[currentCourse.course_id] || {};
       return {
@@ -230,11 +395,52 @@ export default function SignalApp() {
       };
     });
 
-    updateCourseProgress(
+    const updatedCourse = updateCourseProgress(
       currentCourse.course_id,
       chapterId,
-      mastered ? chapterQuizLength : score
+      mastered ? chapterQuizLength : score,
+      answers,
+      chapterQuizLength
     );
+
+    if (updatedCourse && user?.username) {
+      try {
+        const saved = await persistCourse(updatedCourse, user.username);
+
+        if (saved) {
+          // Use saved result to update local state quickly
+          setCourses(prev => {
+            const exists = prev.find(c => c.course_id === saved.course_id);
+            if (exists) return prev.map(c => c.course_id === saved.course_id ? saved : c);
+            return [...prev, saved];
+          });
+          setCurrentCourse(saved);
+
+          const history = saved ? { [saved.course_id]: (saved.quizHistory || {}) } : {};
+          setQuizHistory(prev => ({ ...prev, ...history }));
+        } else {
+          // Fallback: refresh full list
+          const refreshed = await fetchUserCourses(user.username);
+          setCourses(refreshed);
+
+          // Refresh currentCourse reference so UI shows persisted progress immediately
+          const refreshedCurrent = refreshed.find(c => c.course_id === updatedCourse.course_id) ?? null;
+          if (refreshedCurrent) {
+            setCurrentCourse(refreshedCurrent);
+            setActiveChapterId(null);
+            setExpandedChapters([]);
+          }
+
+          const history = refreshed.reduce((acc, c) => {
+            if (c.quizHistory) acc[c.course_id] = c.quizHistory;
+            return acc;
+          }, {} as Record<string, Record<number, QuizAnswer[]>>);
+          setQuizHistory(history);
+        }
+      } catch (err) {
+        console.warn('Failed to persist course progress', err);
+      }
+    }
 
     if (mastered) {
       setRemediations(prev => {
@@ -245,19 +451,20 @@ export default function SignalApp() {
       return;
     }
 
-    setRemediationLoading(prev => ({ ...prev, [chapterId]: true }));
-    try {
-      const remediation = await generateRemediation({
-        courseTitle: currentCourse.title,
-        chapterTitle,
-        chapterContent,
-        missedQuestions: wrongQuestions,
-        userContext: user?.aboutMe || '',
-      });
-      setRemediations(prev => ({ ...prev, [chapterId]: remediation }));
-    } catch (err) {
-      console.error(err);
-      alert("Unable to generate remediation for this chapter. Please try again.");
+      setRemediationLoading(prev => ({ ...prev, [chapterId]: true }));
+      try {
+        const remediation = await generateRemediation({
+          courseTitle: currentCourse.title,
+          chapterTitle,
+          chapterContent,
+          missedQuestions: wrongQuestions,
+          userContext: user?.aboutMe || '',
+          username: user?.username,
+        });
+        setRemediations(prev => ({ ...prev, [chapterId]: remediation }));
+      } catch (err) {
+        console.error(err);
+        alert("Unable to generate remediation for this chapter. Please try again.");
     } finally {
       setRemediationLoading(prev => ({ ...prev, [chapterId]: false }));
     }
@@ -267,6 +474,7 @@ export default function SignalApp() {
     e.preventDefault();
     if (!query.trim()) return;
     setAppState('GENERATING');
+    logClientEvent('search', { query });
     
     let step = 0;
     const interval = setInterval(() => {
@@ -281,23 +489,37 @@ export default function SignalApp() {
       await new Promise(r => setTimeout(r, 2000));
       newCourse = { 
         ...MOCK_COURSE, 
-        course_id: `demo-${crypto.randomUUID()}`, // Use crypto for uniqueness
+        course_id: `demo-${safeRandomId()}`, // Use fallback-safe UUID
         createdAt: new Date().toISOString() 
       };
     } else {
       // API Call
-      const data = await generateCourse(query, user?.aboutMe || "");
+      const data = await generateCourse(query, user?.aboutMe || "", user?.username);
       
       newCourse = { 
         ...data, 
-        course_id: crypto.randomUUID(), // <--- FORCE UNIQUE ID HERE
+        course_id: safeRandomId(), // <--- FORCE UNIQUE ID HERE
         createdAt: new Date().toISOString() 
       };
     }
 
-      // ADD TO END OF LIST (Underneath)
-      setCourses(prev => [...prev, newCourse]); 
-      
+      // Save to DB and update local state
+      let updatedFromServer = false;
+      if (user?.username) {
+        try {
+          await persistCourse(newCourse, user.username);
+          // Rehydrate from server to ensure we have the stored shape
+          const refreshed = await fetchUserCourses(user.username);
+          setCourses(refreshed);
+          updatedFromServer = true;
+        } catch (err) {
+          console.warn('Failed to persist course to DB', err);
+        }
+      }
+      if (!updatedFromServer) {
+        setCourses(prev => [...prev, newCourse]);
+      }
+     
       handleSelectCourse(newCourse);
       
     } catch (err) {
@@ -324,8 +546,26 @@ export default function SignalApp() {
                <Lock className="w-8 h-8 text-white" />
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-center text-white mb-2">Welcome Back</h2>
-          <p className="text-neutral-400 text-center mb-8">Sign in to access your learning library.</p>
+          <h2 className="text-3xl font-bold text-center text-white mb-2">
+            {authMode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}
+          </h2>
+          <p className="text-neutral-400 text-center mb-6">
+            {authMode === 'LOGIN' ? 'Sign in to access your learning library.' : 'Create an account to get started.'}
+          </p>
+          <div className="flex justify-center gap-2 mb-4">
+            <button
+              onClick={() => { setAuthMode('LOGIN'); setAuthError(''); }}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'LOGIN' ? 'bg-white text-black' : 'bg-neutral-900 text-neutral-300 border border-white/10'}`}
+            >
+              Login
+            </button>
+            <button
+              onClick={() => { setAuthMode('SIGNUP'); setAuthError(''); }}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'SIGNUP' ? 'bg-white text-black' : 'bg-neutral-900 text-neutral-300 border border-white/10'}`}
+            >
+              Create account
+            </button>
+          </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Username</label>
@@ -338,8 +578,24 @@ export default function SignalApp() {
                 autoFocus
               />
             </div>
+            {authMode === 'SIGNUP' && (
+              <div>
+                <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">About Me (optional)</label>
+                <textarea
+                  value={signupAbout}
+                  onChange={e => setSignupAbout(e.target.value)}
+                  className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none h-24 resize-none text-sm"
+                  placeholder="e.g., I teach pharmacology to nursing students."
+                />
+              </div>
+            )}
+            {authError && (
+              <div className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                {authError}
+              </div>
+            )}
             <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition-all transform active:scale-95">
-              Enter Signal
+              {authMode === 'LOGIN' ? 'Enter Signal' : 'Create Account'}
             </button>
           </form>
         </motion.div>
@@ -540,10 +796,12 @@ export default function SignalApp() {
                                <AnimatePresence>
                                  {isExpanded && (
                                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}>
-                                     <div data-chapter-body="true" className="pt-6 text-neutral-300 prose prose-invert max-w-none cursor-auto" onClick={e => e.stopPropagation()}>
+                                     <div data-chapter-body="true" className="pt-6 text-neutral-300 cursor-auto" onClick={e => e.stopPropagation()}>
+                                       <article className="prose prose-invert prose-emerald max-w-none prose-p:text-neutral-300 prose-p:leading-relaxed prose-headings:text-white prose-headings:font-bold prose-li:text-neutral-300 prose-strong:text-white prose-strong:font-bold">
                                          <ReactMarkdown>{chapter.content_markdown}</ReactMarkdown>
-                                         
-                                         <div className="mt-8 pt-8 border-t border-white/5">
+                                       </article>
+ 
+                                       <div className="mt-8 pt-8 border-t border-white/5">
                                             <div className="flex items-center gap-2 mb-4 text-emerald-400 text-xs font-bold uppercase tracking-wider">
                                                <CheckCircle className="w-4 h-4" /> Knowledge Check
                                             </div>
@@ -594,7 +852,8 @@ export default function SignalApp() {
                                                                     courseTitle: currentCourse.title,
                                                                     chapterTitle: chapter.title,
                                                                     question: entry.question,
-                                                                    userContext: user?.aboutMe || ''
+                                                                    userContext: user?.aboutMe || '',
+                                                                    username: user?.username,
                                                                   });
                                                                   setQuestionInsights(prev => ({
                                                                     ...prev,

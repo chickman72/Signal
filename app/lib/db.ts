@@ -32,3 +32,10 @@ export async function getCoursesContainer() {
   const database = c.database('SignalApp');
   return database.container('Courses');
 }
+
+export async function getLogsContainer() {
+  const c = getClient();
+  if (!c) throw new Error("Database not connected");
+  const database = c.database('SignalApp');
+  return database.container('ActivityLogs');
+}

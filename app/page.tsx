@@ -504,18 +504,22 @@ export default function SignalApp() {
     }
 
       // Save to DB and update local state
+      let updatedFromServer = false;
       if (user?.username) {
         try {
           await persistCourse(newCourse, user.username);
           // Rehydrate from server to ensure we have the stored shape
           const refreshed = await fetchUserCourses(user.username);
           setCourses(refreshed);
+          updatedFromServer = true;
         } catch (err) {
           console.warn('Failed to persist course to DB', err);
         }
       }
-      setCourses(prev => [...prev, newCourse]); 
-      
+      if (!updatedFromServer) {
+        setCourses(prev => [...prev, newCourse]);
+      }
+     
       handleSelectCourse(newCourse);
       
     } catch (err) {
@@ -792,10 +796,12 @@ export default function SignalApp() {
                                <AnimatePresence>
                                  {isExpanded && (
                                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}>
-                                     <div data-chapter-body="true" className="pt-6 text-neutral-300 prose prose-invert max-w-none cursor-auto" onClick={e => e.stopPropagation()}>
+                                     <div data-chapter-body="true" className="pt-6 text-neutral-300 cursor-auto" onClick={e => e.stopPropagation()}>
+                                       <article className="prose prose-invert prose-emerald max-w-none prose-p:text-neutral-300 prose-p:leading-relaxed prose-headings:text-white prose-headings:font-bold prose-li:text-neutral-300 prose-strong:text-white prose-strong:font-bold">
                                          <ReactMarkdown>{chapter.content_markdown}</ReactMarkdown>
-                                         
-                                         <div className="mt-8 pt-8 border-t border-white/5">
+                                       </article>
+ 
+                                       <div className="mt-8 pt-8 border-t border-white/5">
                                             <div className="flex items-center gap-2 mb-4 text-emerald-400 text-xs font-bold uppercase tracking-wider">
                                                <CheckCircle className="w-4 h-4" /> Knowledge Check
                                             </div>

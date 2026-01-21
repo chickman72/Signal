@@ -9,7 +9,7 @@ import { Course, AppState, User, QuizQuestion, QuizAnswer, VerificationResult, C
 import QuizPlayer from './QuizPlayer';
 import Sidebar from './Sidebar';
 import { MOCK_COURSE } from './mockData';
-import { loginUser, signupUser, updateUserProfile as updateUserProfileServer } from './dbActions';
+import { loginUser, signupUser, updateUserProfile as updateUserProfileServer, getOrCreateUser } from './dbActions';
 
 const safeRandomId = () => {
   const g: any = typeof globalThis !== 'undefined' ? globalThis : undefined;
@@ -34,6 +34,8 @@ export default function SignalApp() {
   const [appState, setAppState] = useState<AppState>('AUTH');
   const [user, setUser] = useState<User | null>(null);
   const [usernameInput, setUsernameInput] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   
   // Data
   const [courses, setCourses] = useState<Course[]>([]);
@@ -107,14 +109,22 @@ export default function SignalApp() {
     const savedUser = localStorage.getItem('signal_user');
     
     if (savedUser) {
-      const u = JSON.parse(savedUser);
+      const u = JSON.parse(savedUser) as User;
+      setUser(u);
+      setEditName(u.username);
+      setEditAbout(u.aboutMe || '');
       (async () => {
         try {
-          const fresh = await loginUser(u.username);
-          setUser(fresh);
-          setEditName(fresh.username);
-          setEditAbout(fresh.aboutMe || '');
-          const userCourses = await fetchUserCourses(fresh.username);
+          const refreshedUser = await getOrCreateUser(u.username);
+          setUser(refreshedUser);
+          setEditName(refreshedUser.username);
+          setEditAbout(refreshedUser.aboutMe || '');
+          localStorage.setItem('signal_user', JSON.stringify(refreshedUser));
+        } catch (err) {
+          console.warn('Unable to refresh user profile', err);
+        }
+        try {
+          const userCourses = await fetchUserCourses(u.username);
           setCourses(userCourses);
 
           // Keep the library closed and let the user choose a course manually.
@@ -193,14 +203,24 @@ export default function SignalApp() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usernameInput.trim()) return;
+    if (!passwordInput.trim()) {
+      setAuthError('Password is required.');
+      return;
+    }
     setAuthError('');
     try {
       let account: User;
       if (authMode === 'SIGNUP') {
-        account = await signupUser(usernameInput.trim(), signupAbout);
+        account = await signupUser(
+          usernameInput.trim(),
+          signupAbout,
+          'student',
+          emailInput.trim(),
+          passwordInput,
+        );
         logClientEvent('signup', { user: account.username });
       } else {
-        account = await loginUser(usernameInput.trim());
+        account = await loginUser(usernameInput.trim(), passwordInput);
         logClientEvent('login', { user: account.username });
       }
 
@@ -208,6 +228,7 @@ export default function SignalApp() {
       setEditName(account.username);
       setEditAbout(account.aboutMe || '');
       localStorage.setItem('signal_user', JSON.stringify(account));
+      setPasswordInput('');
 
       try {
         const userCourses = await fetchUserCourses(account.username);
@@ -282,6 +303,29 @@ export default function SignalApp() {
     setQuestionInsightLoading({});
     setAppState('PLAYING');
     if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const handleDeleteCourse = async (course: Course) => {
+    if (!user?.username) return;
+    const confirmed = window.confirm(`Delete "${course.title}"? This cannot be undone.`);
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/courses/${course.course_id}?username=${encodeURIComponent(user.username)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || 'Failed to delete course');
+      }
+      setCourses(prev => prev.filter(c => c.course_id !== course.course_id));
+      if (currentCourse?.course_id === course.course_id) {
+        setCurrentCourse(null);
+        setAppState('IDLE');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Unable to delete the course right now.');
+    }
   };
 
   const updateCourseProgress = (
@@ -554,13 +598,13 @@ export default function SignalApp() {
           </p>
           <div className="flex justify-center gap-2 mb-4">
             <button
-              onClick={() => { setAuthMode('LOGIN'); setAuthError(''); }}
+              onClick={() => { setAuthMode('LOGIN'); setAuthError(''); setPasswordInput(''); }}
               className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'LOGIN' ? 'bg-white text-black' : 'bg-neutral-900 text-neutral-300 border border-white/10'}`}
             >
               Login
             </button>
             <button
-              onClick={() => { setAuthMode('SIGNUP'); setAuthError(''); }}
+              onClick={() => { setAuthMode('SIGNUP'); setAuthError(''); setPasswordInput(''); }}
               className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'SIGNUP' ? 'bg-white text-black' : 'bg-neutral-900 text-neutral-300 border border-white/10'}`}
             >
               Create account
@@ -576,6 +620,28 @@ export default function SignalApp() {
                 className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                 placeholder="Dr. Smith"
                 autoFocus
+              />
+            </div>
+            {authMode === 'SIGNUP' && (
+              <div>
+                <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Email</label>
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="instructor@school.edu"
+                />
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Password</label>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={e => setPasswordInput(e.target.value)}
+                className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                placeholder="••••••••"
               />
             </div>
             {authMode === 'SIGNUP' && (
@@ -614,6 +680,7 @@ export default function SignalApp() {
         activeCourseId={currentCourse?.course_id}
         onSelectCourse={handleSelectCourse}
         onNewCourse={handleNewCourse}
+        onDeleteCourse={handleDeleteCourse}
         onLogout={handleLogout}
         onEditProfile={() => setShowProfileModal(true)}
       />

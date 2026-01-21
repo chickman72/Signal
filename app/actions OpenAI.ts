@@ -7,6 +7,10 @@ import { Course } from './types';
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+const openaiModel = process.env.OPENAI_MODEL ?? "";
+if (!openaiModel) {
+  throw new Error("Missing OPENAI_MODEL.");
+}
 
 export async function generateCourse(userTopic: string): Promise<Course> {
   if (!userTopic) throw new Error("Topic is required");
@@ -44,7 +48,7 @@ export async function generateCourse(userTopic: string): Promise<Course> {
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: openaiModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Create a course on: "${userTopic}"` },

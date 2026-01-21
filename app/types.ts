@@ -59,9 +59,23 @@ export interface Course {
   quizHistory?: Record<number, QuizAnswer[]>;
 }
 
+export interface InstructorCourse {
+  id: string;
+  title: string;
+  systemPrompt: string;
+  starterPrompts: string[];
+  instructorId: string;
+  createdAt?: string;
+  lastUpdated?: string;
+}
+
 export interface User {
   username: string;
   aboutMe?: string; // <--- NEW FIELD
+  role?: 'student' | 'instructor' | 'administrator';
+  email?: string;
+  createdAt?: string;
+  displayName?: string;
 }
 
 export type AppState = 'AUTH' | 'IDLE' | 'GENERATING' | 'PLAYING';
@@ -79,6 +93,8 @@ export type ActivityEventType =
   | 'quiz_submit'
   | 'remediation_request'
   | 'question_insight'
+  | 'tutor_session_start'
+  | 'tutor_chat'
   | 'error';
 
 export interface ActivityLogEntry {

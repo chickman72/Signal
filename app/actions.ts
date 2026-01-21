@@ -7,8 +7,12 @@ import { logEvent } from './dbActions';
 // Initialize OpenAI / LiteLLM
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL: "https://proxy-ai-anes-uabmc-awefchfueccrddhf.eastus2-01.azurewebsites.net/" 
+  baseURL: process.env.OPENAI_BASE_URL,
 });
+const openaiModel = process.env.OPENAI_MODEL ?? "";
+if (!openaiModel) {
+  throw new Error("Missing OPENAI_MODEL.");
+}
 
 async function verifyCourseContent(course: Course): Promise<VerificationResult> {
   const chapterDigest = course.chapters.map(ch => {
@@ -30,7 +34,7 @@ async function verifyCourseContent(course: Course): Promise<VerificationResult> 
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
+      model: openaiModel,
       messages: [
         { role: "system", content: systemPrompt },
         { 
@@ -66,7 +70,7 @@ async function refineCourseContent(course: Course, feedback: VerificationResult)
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
+      model: openaiModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Original course JSON:\n${JSON.stringify(course)}` },
@@ -131,7 +135,7 @@ export async function generateCourse(userTopic: string, userContext: string = ""
     });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-nano", 
+      model: openaiModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Create a course on: "${userTopic}"` },
@@ -239,7 +243,7 @@ export async function generateRemediation(request: RemediationRequest): Promise<
     });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
+      model: openaiModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Missed questions:\n${missedList}` },
@@ -304,7 +308,7 @@ export async function generateQuestionInsight(request: QuestionInsightRequest): 
     });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
+      model: openaiModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Question: ${question.question}\nOptions: ${question.options.join(' | ')}\nCorrect answer: ${correctOption}` },

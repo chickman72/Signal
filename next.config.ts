@@ -2,7 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-    output: "standalone", // <--- ADD THIS LINE
+  output: "standalone", // <--- ADD THIS LINE
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+    turbopack: {
+      root: __dirname,
+    },
+  },
 };
 
 export default nextConfig;

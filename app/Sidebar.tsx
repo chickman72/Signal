@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { LogOut, PlusCircle, Radio, Settings } from 'lucide-react';
+import { LogOut, PlusCircle, Radio, Settings, GraduationCap, Trash2, Shield } from 'lucide-react';
 import { Course, User } from './types';
 
 interface SidebarProps {
@@ -11,6 +11,7 @@ interface SidebarProps {
   activeCourseId: string | undefined;
   onSelectCourse: (course: Course) => void;
   onNewCourse: () => void;
+  onDeleteCourse: (course: Course) => void;
   onLogout: () => void;
   onEditProfile: () => void; // <--- NEW PROP
   isOpen: boolean;
@@ -22,6 +23,7 @@ export default function Sidebar({
   activeCourseId, 
   onSelectCourse, 
   onNewCourse,
+  onDeleteCourse,
   onLogout,
   onEditProfile,
   isOpen
@@ -54,30 +56,45 @@ export default function Sidebar({
           const grade = course.progress?.overallGrade || 0;
 
           return (
-            <button
+            <div
               key={course.course_id}
-              onClick={() => onSelectCourse(course)}
-              title={course.title}
-              className={`w-full text-left p-3 rounded-xl transition-all group relative overflow-hidden flex-shrink-0
+              className={`w-full rounded-xl transition-all group relative overflow-hidden flex-shrink-0
                 ${isActive ? 'bg-white/10 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-200'}
               `}
             >
-              <div className="flex justify-between items-start mb-1">
-                <span className="font-medium truncate max-w-[140px]">{course.title}</span>
-                {percent > 0 && (
-                   <span className={`text-xs font-bold ${grade >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                     {grade}%
-                   </span>
-                )}
-              </div>
-              
-              <div className="h-1 w-full bg-neutral-700 rounded-full overflow-hidden mt-2">
-                <div 
-                  className={`h-full ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-            </button>
+              <button
+                onClick={() => onSelectCourse(course)}
+                title={course.title}
+                className="w-full text-left p-3"
+              >
+                <div className="flex justify-between items-start mb-1 gap-2">
+                  <span className="font-medium truncate max-w-[140px]">{course.title}</span>
+                  {percent > 0 && (
+                    <span className={`text-xs font-bold ${grade >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {grade}%
+                    </span>
+                  )}
+                </div>
+
+                <div className="h-1 w-full bg-neutral-700 rounded-full overflow-hidden mt-2">
+                  <div
+                    className={`h-full ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDeleteCourse(course);
+                }}
+                className="absolute right-2 top-2 text-neutral-500 hover:text-rose-300"
+                title="Delete course"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           );
         })}
 
@@ -96,6 +113,27 @@ export default function Sidebar({
           <span className="font-semibold">New Course</span>
         </button>
       </div>
+
+      {user.role === "instructor" || user.role === "administrator" ? (
+        <div className="px-4 pb-4">
+          <a
+            href={`/instructor?instructorId=${encodeURIComponent(user.username)}`}
+            className="w-full flex items-center gap-3 p-3 rounded-xl text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition"
+          >
+            <GraduationCap className="w-5 h-5" />
+            <span className="font-semibold">Instructor Studio</span>
+          </a>
+          {user.role === "administrator" ? (
+            <a
+              href="/admin"
+              className="mt-2 w-full flex items-center gap-3 p-3 rounded-xl text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition"
+            >
+              <Shield className="w-5 h-5" />
+              <span className="font-semibold">Admin</span>
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* User Profile (Bottom) */}
       <div className="p-4 bg-black/20 border-t border-white/5">

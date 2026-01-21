@@ -24,10 +24,19 @@ type ChatSession = {
 };
 
 const openaiModel = process.env.OPENAI_MODEL ?? "";
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL,
-});
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
+  }
+  return openaiClient;
+}
 
 const TOPIC_RULES: Array<{ topic: string; pattern: RegExp }> = [
   { topic: "Renal", pattern: /\brenal|\bkidney|\bcreatinine|\bneph/i },
@@ -154,7 +163,8 @@ export async function getCourseMetrics(courseId: string): Promise<{
 
 export async function generateChatInsights(courseId: string) {
   if (!courseId) throw new Error("courseId is required.");
-  if (!process.env.OPENAI_API_KEY || !openaiModel) {
+  const client = getOpenAIClient();
+  if (!client || !openaiModel) {
     return {
       ok: false,
       summary: "AI summary is unavailable. Missing OpenAI configuration.",
@@ -192,7 +202,7 @@ Provide:
 Keep it concise and actionable.
   `.trim();
 
-  const completion = await openai.chat.completions.create({
+  const completion = await client.chat.completions.create({
     model: openaiModel,
     messages: [
       { role: "system", content: prompt },

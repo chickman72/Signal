@@ -3,13 +3,21 @@
 import OpenAI from 'openai';
 import { Course } from './types';
 
-// Initialize OpenAI (ensure OPENAI_API_KEY is in your .env)
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 const openaiModel = process.env.OPENAI_MODEL ?? "";
-if (!openaiModel) {
-  throw new Error("Missing OPENAI_MODEL.");
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY.");
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
+
+function requireOpenAIModel() {
+  if (!openaiModel) throw new Error("Missing OPENAI_MODEL.");
+  return openaiModel;
 }
 
 export async function generateCourse(userTopic: string): Promise<Course> {
@@ -47,8 +55,8 @@ export async function generateCourse(userTopic: string): Promise<Course> {
   `;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: openaiModel,
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Create a course on: "${userTopic}"` },

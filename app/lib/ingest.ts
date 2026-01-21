@@ -1,12 +1,22 @@
 import path from "path";
 import { pathToFileURL } from "url";
-import OpenAI from "openai";
 import { parseOffice } from "officeparser";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL,
-});
+import OpenAI from "openai";
+
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY.");
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
+  }
+  return openaiClient;
+}
 
 async function ensurePdfPolyfills() {
   if (typeof globalThis.DOMMatrix !== "undefined") return;
@@ -83,7 +93,7 @@ export function chunkText(text: string, size: number = 800): string[] {
 }
 
 export async function getEmbeddings(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAIClient().embeddings.create({
     model: "text-embedding-3-small",
     input: text,
   });

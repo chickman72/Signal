@@ -4,14 +4,24 @@ import OpenAI from 'openai';
 import { Course, QuizQuestion, VerificationResult } from './types';
 import { logEvent } from './dbActions';
 
-// Initialize OpenAI / LiteLLM
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL,
-});
 const openaiModel = process.env.OPENAI_MODEL ?? "";
-if (!openaiModel) {
-  throw new Error("Missing OPENAI_MODEL.");
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY.");
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
+  }
+  return openaiClient;
+}
+
+function requireOpenAIModel() {
+  if (!openaiModel) throw new Error("Missing OPENAI_MODEL.");
+  return openaiModel;
 }
 
 async function verifyCourseContent(course: Course): Promise<VerificationResult> {
@@ -33,8 +43,8 @@ async function verifyCourseContent(course: Course): Promise<VerificationResult> 
   `;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: openaiModel,
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { 
@@ -69,8 +79,8 @@ async function refineCourseContent(course: Course, feedback: VerificationResult)
   `;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: openaiModel,
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Original course JSON:\n${JSON.stringify(course)}` },
@@ -134,8 +144,8 @@ export async function generateCourse(userTopic: string, userContext: string = ""
       request: { topic: userTopic, userContext }
     });
 
-    const completion = await openai.chat.completions.create({
-      model: openaiModel,
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Create a course on: "${userTopic}"` },
@@ -242,8 +252,8 @@ export async function generateRemediation(request: RemediationRequest): Promise<
       }
     });
 
-    const completion = await openai.chat.completions.create({
-      model: openaiModel,
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Missed questions:\n${missedList}` },
@@ -307,8 +317,8 @@ export async function generateQuestionInsight(request: QuestionInsightRequest): 
       request: { courseTitle, chapterTitle, question: question.question }
     });
 
-    const completion = await openai.chat.completions.create({
-      model: openaiModel,
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Question: ${question.question}\nOptions: ${question.options.join(' | ')}\nCorrect answer: ${correctOption}` },

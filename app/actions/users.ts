@@ -10,12 +10,12 @@ export async function createUserAccountAction(
   formData: FormData,
 ) {
   try {
-    const username = String(formData.get("username") || "").trim();
+    const displayName = String(formData.get("displayName") || "").trim();
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
     const role = (String(formData.get("role") || "student") as "student" | "instructor" | "administrator");
 
-    await signupUser(username, "", role, email, password);
+    await signupUser(email, password, displayName, "", role);
     return { ok: true, message: "User created." };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create user.";
@@ -73,13 +73,14 @@ export async function updateUserAccountAction(
     }
 
     const user = resources[0] as User & Record<string, any>;
+    const normalizedDisplayName = displayName.trim();
     const updated = {
       ...user,
       id: user.id ?? user.username ?? username,
       username: user.username ?? username,
       email,
       role,
-      displayName: displayName || username,
+      displayName: normalizedDisplayName || undefined,
     };
 
     const { resource: containerInfo } = await container.read();

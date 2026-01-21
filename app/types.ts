@@ -70,6 +70,7 @@ export interface InstructorCourse {
 }
 
 export interface User {
+  id?: string;
   username: string;
   aboutMe?: string; // <--- NEW FIELD
   role?: 'student' | 'instructor' | 'administrator';

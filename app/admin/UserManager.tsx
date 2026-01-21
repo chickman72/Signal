@@ -35,10 +35,9 @@ export default function UserManager({ users }: UserManagerProps) {
         className="grid gap-3 rounded-2xl border border-white/10 bg-neutral-900/40 p-4 md:grid-cols-[1.2fr_1.4fr_1fr_1fr_auto]"
       >
         <input
-          name="username"
-          placeholder="Username"
+          name="displayName"
+          placeholder="Username (optional)"
           className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-emerald-400 focus:outline-none"
-          required
         />
         <input
           name="email"
@@ -104,6 +103,8 @@ function UserRow({ user }: { user: User }) {
   const router = useRouter();
   const [state, formAction] = useActionState(updateUserAccountAction, initialState);
   const [passwordState, passwordAction] = useActionState(resetUserPasswordAction, initialState);
+  const legacyName = user.username && user.email && user.username !== user.email ? user.username : "";
+  const displayName = user.displayName ?? legacyName;
 
   useEffect(() => {
     if (state.ok && state.message) {
@@ -121,7 +122,7 @@ function UserRow({ user }: { user: User }) {
         <input type="hidden" name="username" value={user.username} />
         <input
           name="displayName"
-          defaultValue={user.displayName ?? user.username}
+          defaultValue={displayName}
           className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-white focus:border-emerald-400 focus:outline-none"
         />
         <input

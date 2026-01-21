@@ -60,6 +60,15 @@ export default function SignalApp() {
   const [signupAbout, setSignupAbout] = useState('');
   const [authError, setAuthError] = useState('');
 
+  const getProfileName = (account: User | null) => {
+    if (!account) return '';
+    const display = account.displayName?.trim();
+    if (display) return display;
+    if (!account.email) return account.username ?? '';
+    if (account.username && account.username !== account.email) return account.username;
+    return '';
+  };
+
   const fetchUserCourses = async (username: string) => {
     const res = await fetch(`/api/courses?username=${encodeURIComponent(username)}`);
     if (!res.ok) {
@@ -111,13 +120,13 @@ export default function SignalApp() {
     if (savedUser) {
       const u = JSON.parse(savedUser) as User;
       setUser(u);
-      setEditName(u.username);
+      setEditName(getProfileName(u));
       setEditAbout(u.aboutMe || '');
       (async () => {
         try {
-          const refreshedUser = await getOrCreateUser(u.username);
+          const refreshedUser = await getOrCreateUser(u.email ?? u.username);
           setUser(refreshedUser);
-          setEditName(refreshedUser.username);
+          setEditName(getProfileName(refreshedUser));
           setEditAbout(refreshedUser.aboutMe || '');
           localStorage.setItem('signal_user', JSON.stringify(refreshedUser));
         } catch (err) {
@@ -202,7 +211,10 @@ export default function SignalApp() {
   // --- AUTH & PROFILE HANDLERS ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usernameInput.trim()) return;
+    if (!emailInput.trim()) {
+      setAuthError('Email is required.');
+      return;
+    }
     if (!passwordInput.trim()) {
       setAuthError('Password is required.');
       return;
@@ -212,20 +224,20 @@ export default function SignalApp() {
       let account: User;
       if (authMode === 'SIGNUP') {
         account = await signupUser(
+          emailInput.trim(),
+          passwordInput,
           usernameInput.trim(),
           signupAbout,
           'student',
-          emailInput.trim(),
-          passwordInput,
         );
         logClientEvent('signup', { user: account.username });
       } else {
-        account = await loginUser(usernameInput.trim(), passwordInput);
+        account = await loginUser(emailInput.trim(), passwordInput);
         logClientEvent('login', { user: account.username });
       }
 
       setUser(account);
-      setEditName(account.username);
+      setEditName(getProfileName(account));
       setEditAbout(account.aboutMe || '');
       localStorage.setItem('signal_user', JSON.stringify(account));
       setPasswordInput('');
@@ -265,7 +277,7 @@ export default function SignalApp() {
     if (!user) return;
     const update = async () => {
       try {
-        const updatedUser = await updateUserProfileServer(user.username, editAbout);
+        const updatedUser = await updateUserProfileServer(user.email ?? user.username, editName, editAbout);
         setUser(updatedUser);
         localStorage.setItem('signal_user', JSON.stringify(updatedUser));
         setShowProfileModal(false);
@@ -576,6 +588,7 @@ export default function SignalApp() {
   };
 
   // --- VIEW RENDERERS ---
+  const greetingName = getProfileName(user);
 
   if (appState === 'AUTH') {
     return (
@@ -612,28 +625,16 @@ export default function SignalApp() {
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Username</label>
-              <input 
-                type="text" 
-                value={usernameInput}
-                onChange={e => setUsernameInput(e.target.value)}
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Email</label>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
                 className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                placeholder="Dr. Smith"
+                placeholder="instructor@school.edu"
                 autoFocus
               />
             </div>
-            {authMode === 'SIGNUP' && (
-              <div>
-                <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Email</label>
-                <input
-                  type="email"
-                  value={emailInput}
-                  onChange={e => setEmailInput(e.target.value)}
-                  className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="instructor@school.edu"
-                />
-              </div>
-            )}
             <div>
               <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Password</label>
               <input
@@ -644,6 +645,18 @@ export default function SignalApp() {
                 placeholder="••••••••"
               />
             </div>
+            {authMode === 'SIGNUP' && (
+              <div>
+                <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Username (optional)</label>
+                <input
+                  type="text"
+                  value={usernameInput}
+                  onChange={e => setUsernameInput(e.target.value)}
+                  className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Dr. Smith"
+                />
+              </div>
+            )}
             {authMode === 'SIGNUP' && (
               <div>
                 <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">About Me (optional)</label>
@@ -703,7 +716,7 @@ export default function SignalApp() {
                 </div>
                 <div className="p-6 space-y-4">
                    <div>
-                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">Display Name</label>
+                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">Username (optional)</label>
                      <input 
                        value={editName}
                        onChange={e => setEditName(e.target.value)}
@@ -757,7 +770,9 @@ export default function SignalApp() {
                    exit={{ opacity: 0, y: -20 }}
                    className="text-center mt-20"
                 >
-                  <h1 className="text-5xl font-bold mb-6">Hello, {user?.username}.</h1>
+                  <h1 className="text-5xl font-bold mb-6">
+                    {greetingName ? `Hello, ${greetingName}.` : 'Hello.'}
+                  </h1>
                   <p className="text-xl text-neutral-400 mb-8">What are we learning today?</p>
                   <form onSubmit={handleSearch} className="relative max-w-lg mx-auto">
                     <input

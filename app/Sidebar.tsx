@@ -28,6 +28,11 @@ export default function Sidebar({
   onEditProfile,
   isOpen
 }: SidebarProps) {
+  const trimmedDisplayName = user.displayName?.trim();
+  const hasLegacyName = user.username && user.email && user.username !== user.email;
+  const profileName = trimmedDisplayName || (hasLegacyName ? user.username : "");
+  const sidebarName = profileName || user.email || user.username;
+  const avatarSeed = sidebarName || "User";
   
   return (
     <motion.div 
@@ -140,11 +145,11 @@ export default function Sidebar({
         <div className="flex items-center gap-3">
           {/* Clicking avatar opens profile too */}
           <button onClick={onEditProfile} className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white font-bold shadow-lg hover:scale-105 transition">
-             {user.username.substring(0,2).toUpperCase()}
+             {avatarSeed.substring(0,2).toUpperCase()}
           </button>
           <div className="flex-grow min-w-0">
             <button onClick={onEditProfile} className="text-left hover:underline">
-               <div className="font-medium text-white truncate">{user.username}</div>
+               <div className="font-medium text-white truncate">{sidebarName}</div>
             </button>
             <div className="text-xs text-neutral-500 truncate max-w-[100px]">{user.aboutMe ? 'Customized' : 'Free Plan'}</div>
           </div>

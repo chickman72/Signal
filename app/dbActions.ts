@@ -16,13 +16,20 @@ function verifyPassword(password: string, hash: string, salt: string) {
 }
 
 // --- USER ACTIONS ---
-export async function getOrCreateUser(username: string): Promise<User> {
+export async function getOrCreateUser(email: string): Promise<User> {
   const container = await getUsersContainer();
-  
+  const rawInput = email.trim();
+  const normalizedEmail = rawInput.toLowerCase();
+  if (!rawInput) {
+    throw new Error('Email is required.');
+  }
   const { resources } = await container.items
     .query({
-      query: "SELECT * FROM c WHERE c.username = @username",
-      parameters: [{ name: "@username", value: username }]
+      query: "SELECT * FROM c WHERE c.email = @email OR c.username = @email OR c.username = @username",
+      parameters: [
+        { name: "@email", value: normalizedEmail },
+        { name: "@username", value: rawInput },
+      ]
     })
     .fetchAll();
 
@@ -33,20 +40,33 @@ export async function getOrCreateUser(username: string): Promise<User> {
   throw new Error('Account not found.');
 }
 
-export async function updateUserProfile(username: string, aboutMe: string) {
+export async function updateUserProfile(
+  email: string,
+  displayName: string,
+  aboutMe: string,
+) {
   const container = await getUsersContainer();
-  const user = await getOrCreateUser(username);
-  const updated = { ...user, aboutMe };
-  await container.item(user.username, user.username).replace(updated);
+  const user = await getOrCreateUser(email);
+  const trimmedDisplayName = displayName.trim();
+  const updated = {
+    ...user,
+    aboutMe,
+    displayName: trimmedDisplayName ? trimmedDisplayName : undefined,
+  };
+  await container.item(user.username, user.username).replace(updated as any);
   return updated;
 }
 
-export async function loginUser(username: string, password: string): Promise<User> {
+export async function loginUser(email: string, password: string): Promise<User> {
   const container = await getUsersContainer();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error('Email is required.');
+  }
   const { resources } = await container.items
     .query({
-      query: "SELECT * FROM c WHERE c.username = @username",
-      parameters: [{ name: "@username", value: username }]
+      query: "SELECT * FROM c WHERE c.email = @email OR c.username = @email",
+      parameters: [{ name: "@email", value: normalizedEmail }]
     })
     .fetchAll();
 
@@ -59,7 +79,7 @@ export async function loginUser(username: string, password: string): Promise<Use
     const updated = {
       ...user,
       role: "student" as const,
-      displayName: user.displayName ?? user.username,
+      displayName: user.displayName ?? (user.username !== user.email ? user.username : undefined),
     };
     await container.item(user.username, user.username).replace(updated as any);
     return updated;
@@ -76,47 +96,46 @@ export async function loginUser(username: string, password: string): Promise<Use
 }
 
 export async function signupUser(
-  username: string,
+  email: string,
+  password: string,
+  displayName: string = '',
   aboutMe: string = '',
   role: 'student' | 'instructor' | 'administrator' = 'student',
-  email?: string,
-  password?: string,
 ): Promise<User> {
   const container = await getUsersContainer();
-  const trimmed = username.trim();
-  if (!trimmed) throw new Error('Username is required.');
-  if (!email || !email.trim()) throw new Error('Email is required.');
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error('Email is required.');
   if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
 
   const existing = await container.items
     .query({
-      query: "SELECT * FROM c WHERE c.username = @username OR c.email = @email",
+      query: "SELECT * FROM c WHERE c.email = @email OR c.username = @email",
       parameters: [
-        { name: "@username", value: trimmed },
-        { name: "@email", value: email.trim().toLowerCase() },
+        { name: "@email", value: normalizedEmail },
       ]
     })
     .fetchAll();
 
   if (existing.resources.length > 0) {
-    throw new Error('Username already exists. Please log in instead.');
+    throw new Error('Email already exists. Please log in instead.');
   }
 
   const { hash, salt } = hashPassword(password);
+  const trimmedDisplayName = displayName.trim();
   const newUser: User & { passwordHash: string; passwordSalt: string; email: string; createdAt: string } = {
-    id: trimmed,
-    username: trimmed,
+    id: normalizedEmail,
+    username: normalizedEmail,
     aboutMe,
     role,
-    email: email.trim().toLowerCase(),
+    email: normalizedEmail,
     passwordHash: hash,
     passwordSalt: salt,
     createdAt: new Date().toISOString(),
-    displayName: trimmed,
+    displayName: trimmedDisplayName || undefined,
   } as any;
 
   await container.items.create(newUser);
-  await logEvent('signup', { user: trimmed });
+  await logEvent('signup', { user: newUser.username });
   return newUser;
 }
 

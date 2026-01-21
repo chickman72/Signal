@@ -37,6 +37,9 @@ export default function TutorPage() {
           }
         }
         const kickoff = await initializeTutorSession(courseId, studentName);
+        if (!kickoff.ok) {
+          throw new Error(kickoff.error);
+        }
         const course = await getCourseDetails(courseId);
         if (isMounted) {
           setSession({ id: kickoff.sessionId, courseId });

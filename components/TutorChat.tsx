@@ -66,10 +66,13 @@ export default function TutorChat({
 
     try {
       const response = await chatWithTutor(sessionId, userText, courseId);
+      if (!response.ok) {
+        throw new Error(response.error);
+      }
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: response,
+        content: response.message,
       };
       setMessages((prev) => [...prev, assistantMessage]);
       requestAnimationFrame(() => {

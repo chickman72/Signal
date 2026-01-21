@@ -7,13 +7,24 @@ import { logEvent } from "../dbActions";
 import { getCourseDetails } from "./courses";
 import { createChatSession } from "./chatSessions";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL,
-});
 const openaiModel = process.env.OPENAI_MODEL ?? "";
-if (!openaiModel) {
-  throw new Error("Missing OPENAI_MODEL.");
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY.");
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
+  }
+  return openaiClient;
+}
+
+function requireOpenAIModel() {
+  if (!openaiModel) throw new Error("Missing OPENAI_MODEL.");
+  return openaiModel;
 }
 
 const GREETING_PROMPT =
@@ -54,32 +65,50 @@ Context Usage:
 }
 
 async function buildContextBlock(courseId: string, queryText?: string) {
-  const client = searchClient();
+  let client;
+  try {
+    client = searchClient();
+  } catch (error) {
+    console.error("Tutor search client init failed:", error);
+    return "No relevant context found.";
+  }
+
   const filter = `courseId eq '${escapeFilterValue(courseId)}'`;
   const contextChunks: string[] = [];
 
   if (queryText) {
-    const embeddingResponse = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: queryText,
-    });
-    const embedding = embeddingResponse.data[0]?.embedding;
-    if (!embedding) throw new Error("Failed to generate embedding.");
+    let embedding: number[] | undefined;
+    try {
+      const embeddingResponse = await getOpenAIClient().embeddings.create({
+        model: "text-embedding-3-small",
+        input: queryText,
+      });
+      embedding = embeddingResponse.data[0]?.embedding;
+    } catch (error) {
+      console.error("Tutor embedding generation failed:", error);
+    }
+    if (!embedding) return "No relevant context found.";
 
-    const searchResponse = await client.search("*", {
-      filter,
-      select: ["content", "sourcefile"],
-      vectorSearchOptions: {
-        queries: [
-          {
-            kind: "vector",
-            vector: embedding,
-            kNearestNeighborsCount: 3,
-            fields: ["embedding"],
-          },
-        ],
-      },
-    });
+    let searchResponse;
+    try {
+      searchResponse = await client.search("*", {
+        filter,
+        select: ["content", "sourcefile"],
+        vectorSearchOptions: {
+          queries: [
+            {
+              kind: "vector",
+              vector: embedding,
+              kNearestNeighborsCount: 3,
+              fields: ["embedding"],
+            },
+          ],
+        },
+      });
+    } catch (error) {
+      console.error("Tutor vector search failed:", error);
+      return "No relevant context found.";
+    }
 
     for await (const result of searchResponse.results) {
       const doc = result.document as { content?: string; sourcefile?: string };
@@ -117,8 +146,8 @@ Given the user's last message, identify the specific medical topic they want to 
 - Return ONLY the topic phrase, no extra text.
   `.trim();
 
-  const completion = await openai.chat.completions.create({
-    model: openaiModel,
+  const completion = await getOpenAIClient().chat.completions.create({
+    model: requireOpenAIModel(),
     messages: [
       { role: "system", content: prompt },
       {
@@ -132,15 +161,16 @@ Given the user's last message, identify the specific medical topic they want to 
 }
 
 export async function initializeTutorSession(courseId: string, studentName?: string) {
-  if (!courseId) throw new Error("courseId is required.");
+  try {
+    if (!courseId) throw new Error("courseId is required.");
 
-  const session = await createChatSession(courseId, studentName);
-  const course = await getCourseDetails(courseId);
-  const instructorPrompt = course?.systemPrompt?.trim();
-  const contextBlock = await buildContextBlock(courseId);
+    const session = await createChatSession(courseId, studentName);
+    const course = await getCourseDetails(courseId);
+    const instructorPrompt = course?.systemPrompt?.trim();
+    const contextBlock = await buildContextBlock(courseId);
 
-  const basePersonaPrompt = buildBasePersonaPrompt();
-  const finalSystemPrompt = `
+    const basePersonaPrompt = buildBasePersonaPrompt();
+    const finalSystemPrompt = `
 ${basePersonaPrompt}
 
 Instructor Context:
@@ -150,31 +180,37 @@ Knowledge Context (source of truth):
 ${contextBlock}
   `.trim();
 
-  const completion = await openai.chat.completions.create({
-    model: openaiModel,
-    messages: [
-      { role: "system", content: finalSystemPrompt },
-      { role: "user", content: GREETING_PROMPT },
-    ],
-  });
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
+      messages: [
+        { role: "system", content: finalSystemPrompt },
+        { role: "user", content: GREETING_PROMPT },
+      ],
+    });
 
-  const responseText = completion.choices[0]?.message?.content?.trim();
-  if (!responseText) throw new Error("No response from tutor.");
+    const responseText = completion.choices[0]?.message?.content?.trim();
+    if (!responseText) throw new Error("No response from tutor.");
 
-  const container = await getChatSessionsContainer();
-  const now = new Date().toISOString();
-  const updatedSession = {
-    ...session,
-    messages: [{ role: "assistant", content: responseText, createdAt: now }],
-    lastUpdated: now,
-  };
+    const container = await getChatSessionsContainer();
+    const now = new Date().toISOString();
+    const updatedSession = {
+      ...session,
+      messages: [{ role: "assistant", content: responseText, createdAt: now }],
+      lastUpdated: now,
+    };
 
-  await container.item(session.id, session.id).replace(updatedSession);
+    await container.item(session.id, session.id).replace(updatedSession);
 
-  return {
-    sessionId: session.id,
-    initialMessage: responseText,
-  };
+    return {
+      ok: true as const,
+      sessionId: session.id,
+      initialMessage: responseText,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to start tutor session.";
+    console.error("Tutor session init failed:", error);
+    return { ok: false as const, error: message };
+  }
 }
 
 export async function chatWithTutor(
@@ -182,31 +218,32 @@ export async function chatWithTutor(
   userMessage: string,
   courseId: string,
 ) {
-  if (!sessionId || !userMessage || !courseId) {
-    throw new Error("sessionId, userMessage, and courseId are required.");
-  }
+  try {
+    if (!sessionId || !userMessage || !courseId) {
+      throw new Error("sessionId, userMessage, and courseId are required.");
+    }
 
-  const container = await getChatSessionsContainer();
-  const { resource } = await container.item(sessionId, sessionId).read();
-  if (!resource) {
-    throw new Error("Chat session not found.");
-  }
+    const container = await getChatSessionsContainer();
+    const { resource } = await container.item(sessionId, sessionId).read();
+    if (!resource) {
+      throw new Error("Chat session not found.");
+    }
 
-  const historyMessages = Array.isArray(resource.messages) ? resource.messages : [];
-  const recentHistory = historyMessages
-    .slice(-8)
-    .map((message: { role?: string; content?: string }) => {
-      const role = message.role === "assistant" ? "Tutor" : "Student";
-      return `${role}: ${message.content ?? ""}`;
-    })
-    .join("\n");
+    const historyMessages = Array.isArray(resource.messages) ? resource.messages : [];
+    const recentHistory = historyMessages
+      .slice(-8)
+      .map((message: { role?: string; content?: string }) => {
+        const role = message.role === "assistant" ? "Tutor" : "Student";
+        return `${role}: ${message.content ?? ""}`;
+      })
+      .join("\n");
 
-  const searchQuery = await generateSearchQuery(userMessage, recentHistory);
-  const contextBlock = await buildContextBlock(courseId, searchQuery);
-  const basePersonaPrompt = buildBasePersonaPrompt();
-  const course = await getCourseDetails(courseId);
-  const instructorPrompt = course?.systemPrompt?.trim();
-  const finalSystemPrompt = `
+    const searchQuery = await generateSearchQuery(userMessage, recentHistory);
+    const contextBlock = await buildContextBlock(courseId, searchQuery);
+    const basePersonaPrompt = buildBasePersonaPrompt();
+    const course = await getCourseDetails(courseId);
+    const instructorPrompt = course?.systemPrompt?.trim();
+    const finalSystemPrompt = `
 ${basePersonaPrompt}
 
 Instructor Context:
@@ -225,37 +262,42 @@ Chat History (most recent first):
 ${recentHistory}
   `.trim();
 
-  const completion = await openai.chat.completions.create({
-    model: openaiModel,
-    messages: [
-      { role: "system", content: finalSystemPrompt },
-      { role: "user", content: userMessage },
-    ],
-  });
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: requireOpenAIModel(),
+      messages: [
+        { role: "system", content: finalSystemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    });
 
-  const responseText = completion.choices[0]?.message?.content?.trim();
-  if (!responseText) throw new Error("No response from tutor.");
+    const responseText = completion.choices[0]?.message?.content?.trim();
+    if (!responseText) throw new Error("No response from tutor.");
 
-  const messages = Array.isArray(resource.messages) ? resource.messages : [];
-  const now = new Date().toISOString();
-  messages.push({ role: "user", content: userMessage, createdAt: now });
-  messages.push({ role: "assistant", content: responseText, createdAt: now });
+    const messages = Array.isArray(resource.messages) ? resource.messages : [];
+    const now = new Date().toISOString();
+    messages.push({ role: "user", content: userMessage, createdAt: now });
+    messages.push({ role: "assistant", content: responseText, createdAt: now });
 
-  const updatedSession = {
-    ...resource,
-    messages,
-    lastUpdated: now,
-  };
+    const updatedSession = {
+      ...resource,
+      messages,
+      lastUpdated: now,
+    };
 
-  await container.item(sessionId, sessionId).replace(updatedSession);
+    await container.item(sessionId, sessionId).replace(updatedSession);
 
-  await logEvent("tutor_chat", {
-    user: sessionId,
-    courseId,
-    sessionId,
-    request: { message: userMessage },
-    response: { answer: responseText },
-  });
+    await logEvent("tutor_chat", {
+      user: sessionId,
+      courseId,
+      sessionId,
+      request: { message: userMessage },
+      response: { answer: responseText },
+    });
 
-  return responseText;
+    return { ok: true as const, message: responseText };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Tutor response failed.";
+    console.error("Tutor chat failed:", error);
+    return { ok: false as const, error: message };
+  }
 }

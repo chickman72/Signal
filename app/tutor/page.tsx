@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import TutorChat from "../../components/TutorChat";
-import { initializeTutorSession } from "../actions/tutor";
 import { getCourseDetails } from "../actions/courses";
 
 type ChatSession = {
@@ -36,7 +35,14 @@ export default function TutorPage() {
             studentName = undefined;
           }
         }
-        const kickoff = await initializeTutorSession(courseId, studentName);
+        const kickoffResponse = await fetch("/api/tutor/init", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ courseId, studentName }),
+        });
+        const kickoff = (await kickoffResponse.json()) as
+          | { ok: true; sessionId: string; initialMessage: string }
+          | { ok: false; error: string };
         if (!kickoff.ok) {
           throw new Error(kickoff.error);
         }

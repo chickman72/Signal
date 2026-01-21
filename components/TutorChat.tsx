@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { chatWithTutor } from "../app/actions/tutor";
 
 type ChatMessage = {
   id: string;
@@ -65,14 +64,21 @@ export default function TutorChat({
     setIsLoading(true);
 
     try {
-      const response = await chatWithTutor(sessionId, userText, courseId);
-      if (!response.ok) {
-        throw new Error(response.error);
+      const response = await fetch("/api/tutor/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, courseId, message: userText }),
+      });
+      const responseBody = (await response.json()) as
+        | { ok: true; message: string }
+        | { ok: false; error: string };
+      if (!responseBody.ok) {
+        throw new Error(responseBody.error);
       }
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: response.message,
+        content: responseBody.message,
       };
       setMessages((prev) => [...prev, assistantMessage]);
       requestAnimationFrame(() => {

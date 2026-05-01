@@ -38,20 +38,20 @@ export default function Sidebar({
     <motion.div 
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: isOpen ? 280 : 0, opacity: isOpen ? 1 : 0 }}
-      className="h-screen bg-black/40 backdrop-blur-xl border-r border-white/10 flex flex-col overflow-hidden whitespace-nowrap fixed left-0 top-0 z-40"
+      className="fixed left-0 top-0 z-40 flex h-dvh max-w-[86vw] flex-col overflow-hidden whitespace-nowrap border-r border-slate-200 bg-white/95 shadow-xl shadow-slate-200/80 backdrop-blur-xl md:bg-white/90 md:shadow-none"
     >
       {/* Brand Header */}
-      <div className="p-6 flex items-center gap-3 border-b border-white/5">
+      <div className="flex items-center gap-3 border-b border-slate-200 p-4 sm:p-6">
         <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
           <Radio className="w-4 h-4 text-white" />
         </div>
-        <span className="font-bold text-xl tracking-tight text-white">Signal</span>
+        <span className="font-bold text-xl tracking-tight text-slate-950">Signal</span>
       </div>
 
       {/* Course List (Top) */}
       {/* ADDED 'flex flex-col' to ensure vertical stacking */}
-      <div className="flex-grow overflow-y-auto p-4 flex flex-col gap-2"> 
-        <div className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
+      <div className="flex flex-grow flex-col gap-2 overflow-y-auto p-3 sm:p-4"> 
+        <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-2">
           Your Library
         </div>
         
@@ -64,7 +64,7 @@ export default function Sidebar({
             <div
               key={course.course_id}
               className={`w-full rounded-xl transition-all group relative overflow-hidden flex-shrink-0
-                ${isActive ? 'bg-white/10 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-200'}
+                ${isActive ? 'bg-slate-100 text-slate-950' : 'text-slate-600 hover:bg-white hover:text-slate-800'}
               `}
             >
               <button
@@ -72,16 +72,17 @@ export default function Sidebar({
                 title={course.title}
                 className="w-full text-left p-3"
               >
-                <div className="flex justify-between items-start mb-1 gap-2">
-                  <span className="font-medium truncate max-w-[140px]">{course.title}</span>
+                <div className="mb-1 grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-2 pr-1">
+                  <span className="truncate font-medium">{course.title}</span>
                   {percent > 0 && (
-                    <span className={`text-xs font-bold ${grade >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <span className={`text-xs font-bold ${grade >= 70 ? 'text-emerald-700' : 'text-amber-700'}`}>
                       {grade}%
                     </span>
                   )}
+                  <span className="h-4 w-4" aria-hidden="true" />
                 </div>
 
-                <div className="h-1 w-full bg-neutral-700 rounded-full overflow-hidden mt-2">
+                <div className="h-1 w-full bg-slate-200 rounded-full overflow-hidden mt-2">
                   <div
                     className={`h-full ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
                     style={{ width: `${percent}%` }}
@@ -94,7 +95,7 @@ export default function Sidebar({
                   event.stopPropagation();
                   onDeleteCourse(course);
                 }}
-                className="absolute right-2 top-2 text-neutral-500 hover:text-rose-300"
+                className="absolute right-2 top-3 text-slate-500 hover:text-rose-700"
                 title="Delete course"
               >
                 <Trash2 className="w-4 h-4" />
@@ -104,15 +105,15 @@ export default function Sidebar({
         })}
 
         {courses.length === 0 && (
-          <div className="text-sm text-neutral-600 italic px-2">No courses yet.</div>
+          <div className="text-sm text-slate-400 italic px-2">No courses yet.</div>
         )}
       </div>
 
       {/* New Course Button */}
-      <div className="p-4 border-t border-white/5">
+      <div className="border-t border-slate-200 p-3 sm:p-4">
         <button 
           onClick={onNewCourse}
-          className="w-full flex items-center gap-3 p-3 rounded-xl bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white transition group"
+          className="w-full flex items-center gap-3 p-3 rounded-xl bg-emerald-600/20 text-emerald-700 hover:bg-emerald-600 hover:text-white transition group"
         >
           <PlusCircle className="w-5 h-5" />
           <span className="font-semibold">New Course</span>
@@ -120,10 +121,10 @@ export default function Sidebar({
       </div>
 
       {user.role === "instructor" || user.role === "administrator" ? (
-        <div className="px-4 pb-4">
+        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <a
             href={`/instructor?instructorId=${encodeURIComponent(user.username)}`}
-            className="w-full flex items-center gap-3 p-3 rounded-xl text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition"
+            className="w-full flex items-center gap-3 p-3 rounded-xl text-slate-600 hover:bg-white hover:text-slate-800 transition"
           >
             <GraduationCap className="w-5 h-5" />
             <span className="font-semibold">Instructor Studio</span>
@@ -131,7 +132,7 @@ export default function Sidebar({
           {user.role === "administrator" ? (
             <a
               href="/admin"
-              className="mt-2 w-full flex items-center gap-3 p-3 rounded-xl text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition"
+              className="mt-2 w-full flex items-center gap-3 p-3 rounded-xl text-slate-600 hover:bg-white hover:text-slate-800 transition"
             >
               <Shield className="w-5 h-5" />
               <span className="font-semibold">Admin</span>
@@ -141,7 +142,7 @@ export default function Sidebar({
       ) : null}
 
       {/* User Profile (Bottom) */}
-      <div className="p-4 bg-black/20 border-t border-white/5">
+      <div className="border-t border-slate-200 bg-slate-100/80 p-3 sm:p-4">
         <div className="flex items-center gap-3">
           {/* Clicking avatar opens profile too */}
           <button onClick={onEditProfile} className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white font-bold shadow-lg hover:scale-105 transition">
@@ -149,16 +150,16 @@ export default function Sidebar({
           </button>
           <div className="flex-grow min-w-0">
             <button onClick={onEditProfile} className="text-left hover:underline">
-               <div className="font-medium text-white truncate">{sidebarName}</div>
+               <div className="font-medium text-slate-950 truncate">{sidebarName}</div>
             </button>
-            <div className="text-xs text-neutral-500 truncate max-w-[100px]">{user.aboutMe ? 'Customized' : 'Free Plan'}</div>
+            <div className="text-xs text-slate-500 truncate max-w-[100px]">{user.aboutMe ? 'Customized' : 'Free Plan'}</div>
           </div>
           
           <div className="flex gap-1">
-             <button onClick={onEditProfile} className="text-neutral-400 hover:text-white p-1 transition" title="Edit Profile">
+             <button onClick={onEditProfile} className="text-slate-600 hover:text-slate-950 p-1 transition" title="Edit Profile">
                <Settings className="w-4 h-4" />
              </button>
-             <button onClick={onLogout} className="text-neutral-400 hover:text-white p-1 transition" title="Logout">
+             <button onClick={onLogout} className="text-slate-600 hover:text-slate-950 p-1 transition" title="Logout">
                <LogOut className="w-4 h-4" />
              </button>
           </div>

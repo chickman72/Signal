@@ -26,7 +26,7 @@ export default function ChatInsights({ courseId }: ChatInsightsProps) {
   };
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+    <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
       <div className="flex items-center justify-between">
         <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
           Latest Chat Insights
@@ -35,12 +35,12 @@ export default function ChatInsights({ courseId }: ChatInsightsProps) {
           type="button"
           onClick={handleRefresh}
           disabled={isPending}
-          className="rounded-full border border-cyan-400/50 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full border border-cyan-400/50 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Refreshing..." : "Refresh"}
         </button>
       </div>
-      <p className="mt-4 text-sm text-slate-200 whitespace-pre-line">
+      <p className="mt-4 text-sm text-slate-800 whitespace-pre-line">
         {summary}
       </p>
     </div>

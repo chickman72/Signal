@@ -27,7 +27,7 @@ export default function DeleteCourseButton({ courseId, instructorId }: DeleteCou
       <input type="hidden" name="instructorId" value={instructorId} />
       <button
         type="submit"
-        className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-200 transition hover:border-rose-400 hover:bg-rose-500/20"
+        className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-700 transition hover:border-rose-400 hover:bg-rose-500/20"
       >
         Delete
       </button>

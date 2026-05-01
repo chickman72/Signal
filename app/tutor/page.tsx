@@ -11,9 +11,8 @@ type ChatSession = {
 
 export default function TutorPage() {
   const [session, setSession] = useState<ChatSession | null>(null);
-  const [initialMessage, setInitialMessage] = useState<string | null>(null);
   const [starterPrompts, setStarterPrompts] = useState<string[]>([]);
-  const [courseInfo, setCourseInfo] = useState<{ id: string; title?: string } | null>(null);
+  const [courseInfo, setCourseInfo] = useState<{ id: string; title?: string; description?: string; tutorMode?: 'simulation' | 'course_tutor' } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,7 +48,6 @@ export default function TutorPage() {
         const course = await getCourseDetails(courseId);
         if (isMounted) {
           setSession({ id: kickoff.sessionId, courseId });
-          setInitialMessage(kickoff.initialMessage);
         }
         if (isMounted && course?.starterPrompts) {
           setStarterPrompts(course.starterPrompts);
@@ -58,6 +56,8 @@ export default function TutorPage() {
           setCourseInfo({
             id: courseId,
             title: course?.title,
+            description: course?.description,
+            tutorMode: course?.tutorMode,
           });
         }
       } catch (err) {
@@ -74,36 +74,41 @@ export default function TutorPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-6">
-        <p className="text-sm text-rose-300">{error}</p>
+      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center px-6">
+        <p className="text-sm text-rose-700">{error}</p>
       </main>
     );
   }
 
   if (!session) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-6">
-        <p className="text-sm text-slate-400">Loading Preceptor...</p>
+      <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center px-6">
+        <p className="text-sm text-slate-600">
+          {courseInfo?.tutorMode === 'simulation' ? 'Loading Patient Simulation...' : 'Loading Preceptor...'}
+        </p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex w-full max-w-4xl flex-col px-6 py-10">
-        <header className="mb-8">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-6 sm:px-6 sm:py-10">
+        <header className="mb-6 sm:mb-8">
           <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Tutor</p>
-          <h1 className="text-2xl font-semibold text-slate-50">
-            {courseInfo?.title || "Nursing Preceptor"}
+          <h1 className="text-xl font-semibold text-slate-950 sm:text-2xl">
+            {courseInfo?.title || (courseInfo?.tutorMode === 'simulation' ? "Patient Simulation" : "Nursing Preceptor")}
           </h1>
-          <p className="mt-2 text-sm text-slate-400">
-            Ask questions, reflect on clinical concepts, and receive targeted coaching.
+          <p className="mt-2 text-sm text-slate-600">
+            {courseInfo?.description || 
+             (courseInfo?.tutorMode === 'simulation' 
+               ? 'Practice clinical communication by speaking to a simulated patient.'
+               : 'Ask questions, reflect on clinical concepts, and receive targeted coaching.')}
           </p>
-          <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-400">
-            <span className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1">
+          <div className="mt-4 flex flex-col gap-2 text-xs text-slate-600 sm:flex-row sm:flex-wrap sm:gap-3">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 break-all">
               Course ID: {courseInfo?.id ?? session.courseId}
             </span>
-            <span className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 break-all">
               Session: {session.id}
             </span>
           </div>
@@ -112,7 +117,7 @@ export default function TutorPage() {
           sessionId={session.id}
           courseId={session.courseId}
           starterPrompts={starterPrompts}
-          initialMessage={initialMessage ?? undefined}
+          tutorMode={courseInfo?.tutorMode}
         />
       </div>
     </main>

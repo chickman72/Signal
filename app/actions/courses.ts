@@ -10,6 +10,8 @@ import { revalidatePath } from "next/cache";
 type CourseInput = {
   id?: string;
   title: string;
+  description?: string;
+  tutorMode: 'simulation' | 'course_tutor';
   systemPrompt: string;
   starterPrompts: string[];
   instructorId: string;
@@ -27,6 +29,8 @@ export async function saveCourseDetails(courseData: CourseInput) {
   const record: InstructorCourse = {
     id,
     title: courseData.title,
+    description: courseData.description,
+    tutorMode: courseData.tutorMode,
     systemPrompt: courseData.systemPrompt,
     starterPrompts: courseData.starterPrompts ?? [],
     instructorId: courseData.instructorId,

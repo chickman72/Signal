@@ -25,18 +25,18 @@ export default function InstructorGuard({ children }: InstructorGuardProps) {
 
   if (authorized === null) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-6">
-        <p className="text-sm text-slate-400">Checking instructor access...</p>
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center px-6">
+        <p className="text-sm text-slate-600">Checking instructor access...</p>
       </div>
     );
   }
 
   if (!authorized) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-6">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center">
-          <p className="text-sm text-slate-300">Instructor access only.</p>
-          <a href="/" className="mt-3 inline-flex text-xs uppercase tracking-wide text-cyan-300">
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center px-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+          <p className="text-sm text-slate-700">Instructor access only.</p>
+          <a href="/" className="mt-3 inline-flex text-xs uppercase tracking-wide text-cyan-700">
             Return to Home
           </a>
         </div>

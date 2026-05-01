@@ -41,12 +41,12 @@ export default function DeleteButton({
       <input type="hidden" name="blobName" value={blobName} />
       <button
         type="submit"
-        className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-200 transition hover:border-rose-400 hover:bg-rose-500/20"
+        className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-700 transition hover:border-rose-400 hover:bg-rose-500/20"
       >
         Delete
       </button>
       {!state.ok && state.message ? (
-        <span className="ml-3 text-xs text-rose-300">{state.message}</span>
+        <span className="ml-3 text-xs text-rose-700">{state.message}</span>
       ) : null}
     </form>
   );

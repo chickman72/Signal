@@ -132,7 +132,7 @@ export async function generateCourse(userTopic: string, userContext: string = ""
     }
 
     DESIGN RULES:
-    1. Structure: Exactly 3 chapters.
+    1. Structure: Exactly 5 chapters.
     2. Quiz: Exactly 5 questions per chapter.
     3. Output: ONLY raw JSON.
   `;

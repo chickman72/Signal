@@ -62,6 +62,8 @@ export interface Course {
 export interface InstructorCourse {
   id: string;
   title: string;
+  description?: string;
+  tutorMode: 'simulation' | 'course_tutor';
   systemPrompt: string;
   starterPrompts: string[];
   instructorId: string;

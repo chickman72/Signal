@@ -51,7 +51,7 @@ export default function UploadForm({ courseId }: UploadFormProps) {
         <input
           name="courseId"
           placeholder="Course ID"
-          className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 sm:max-w-xs"
+          className="w-full rounded-lg border border-slate-300 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 sm:max-w-xs"
         />
       )}
       <div className="flex-1">
@@ -73,13 +73,13 @@ export default function UploadForm({ courseId }: UploadFormProps) {
               fileInputRef.current.files = event.dataTransfer.files;
             }
           }}
-          className={`flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-4 text-center text-sm text-slate-300 transition ${
+          className={`flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-4 text-center text-sm text-slate-700 transition ${
             isDragging
-              ? "border-cyan-400 bg-cyan-500/10 text-cyan-200"
-              : "border-slate-700 bg-slate-950/40 hover:border-cyan-500/60"
+              ? "border-cyan-400 bg-cyan-500/10 text-cyan-700"
+              : "border-slate-300 bg-slate-50/40 hover:border-cyan-500/60"
           }`}
         >
-          <span className="font-semibold text-slate-100">
+          <span className="font-semibold text-slate-900">
             Drag & drop PDFs, DOCX, or PPTX here
           </span>
           <span className="text-xs text-slate-500">
@@ -98,20 +98,20 @@ export default function UploadForm({ courseId }: UploadFormProps) {
           />
         </label>
         {selectedFiles.length > 0 ? (
-          <div className="mt-2 text-xs text-slate-400">
+          <div className="mt-2 text-xs text-slate-600">
             {selectedFiles.map((file) => file.name).join(", ")}
           </div>
         ) : null}
       </div>
       <button
         type="submit"
-        className="rounded-lg bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+        className="w-full rounded-lg bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 sm:w-auto"
       >
         Upload
       </button>
       {state.message ? (
         <span
-          className={`text-sm ${state.ok ? "text-emerald-300" : "text-rose-300"}`}
+          className={`text-sm ${state.ok ? "text-emerald-700" : "text-rose-700"}`}
         >
           {state.message}
         </span>

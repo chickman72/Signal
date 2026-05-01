@@ -14,6 +14,7 @@ type TutorChatProps = {
   courseId: string;
   starterPrompts?: string[];
   initialMessage?: string;
+  tutorMode?: 'simulation' | 'course_tutor';
 };
 
 export default function TutorChat({
@@ -21,6 +22,7 @@ export default function TutorChat({
   courseId,
   starterPrompts = [],
   initialMessage,
+  tutorMode = 'course_tutor',
 }: TutorChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -88,7 +90,7 @@ export default function TutorChat({
       const fallbackMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "Something went wrong while contacting the preceptor. Please try again.",
+        content: `Something went wrong while contacting the ${tutorMode === 'simulation' ? 'patient' : 'preceptor'}. Please try again.`,
       };
       setMessages((prev) => [...prev, fallbackMessage]);
     } finally {
@@ -97,10 +99,10 @@ export default function TutorChat({
   }
 
   return (
-    <div className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl shadow-slate-950/40">
+    <div className="flex h-[calc(100dvh-15rem)] min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/80 sm:h-[70vh]">
       <div
         ref={scrollRef}
-        className="flex-1 space-y-4 overflow-y-auto px-6 py-6"
+        className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6"
       >
         {messages.map((message) => (
           <div
@@ -108,10 +110,10 @@ export default function TutorChat({
             className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+              className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed sm:max-w-[75%] ${
                 message.role === "user"
                   ? "bg-cyan-500/80 text-slate-950"
-                  : "bg-slate-800 text-slate-100"
+                  : "bg-slate-100 text-slate-900"
               }`}
             >
               {message.role === "assistant" ? (
@@ -123,7 +125,7 @@ export default function TutorChat({
           </div>
         ))}
         {showStarterPrompts ? (
-          <div className="relative z-10 rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 py-6 text-center text-sm text-slate-400">
+          <div className="relative z-10 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-4 py-6 text-center text-sm text-slate-600">
             Start by asking a clinical question or clarifying a concept.
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {promptOptions.map((prompt) => (
@@ -131,7 +133,7 @@ export default function TutorChat({
                   key={prompt}
                   type="button"
                   onClick={() => setInput(prompt)}
-                  className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-xs text-slate-200 hover:border-cyan-500 hover:text-cyan-300"
+                  className="rounded-full border border-slate-300 bg-slate-50/60 px-3 py-1 text-xs text-slate-800 hover:border-cyan-500 hover:text-cyan-700"
                 >
                   {prompt}
                 </button>
@@ -141,15 +143,15 @@ export default function TutorChat({
         ) : null}
         {isLoading ? (
           <div className="flex justify-start">
-            <div className="rounded-2xl bg-slate-800 px-4 py-3 text-sm text-slate-300">
-              Preceptor is thinking...
+            <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
+              {tutorMode === 'simulation' ? 'Patient is responding...' : 'Preceptor is thinking...'}
             </div>
           </div>
         ) : null}
       </div>
 
-      <div className="border-t border-slate-800 bg-slate-950/60 px-4 py-4">
-        <div className="flex items-center gap-3">
+      <div className="border-t border-slate-200 bg-slate-50/60 px-4 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -160,14 +162,14 @@ export default function TutorChat({
               }
             }}
             rows={2}
-            placeholder="Ask the preceptor anything..."
-            className="flex-1 resize-none rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+            placeholder={tutorMode === 'simulation' ? "Speak to the patient..." : "Ask the preceptor anything..."}
+            className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 sm:flex-1"
           />
           <button
             type="button"
             onClick={handleSend}
             disabled={!canSend}
-            className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            className="w-full rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600 sm:w-auto"
           >
             Send
           </button>

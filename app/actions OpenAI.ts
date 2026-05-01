@@ -49,7 +49,7 @@ export async function generateCourse(userTopic: string): Promise<Course> {
 
     DESIGN RULES:
     1. **Chain of Thought:** Analyze the intent. If the topic is "Quantum Physics for 5-year-olds", the tone must be playful and simple. If "Advanced Macroeconomics", be academic.
-    2. **Structure:** Generate exactly 3 chapters.
+    2. **Structure:** Generate exactly 5 chapters.
     3. **Audio Script:** This is CRITICAL. Write the script as if a host is speaking to the user. Do not read the markdown verbatim. Summarize and engage.
     4. **Output:** Return ONLY raw JSON. No markdown code blocks.
   `;

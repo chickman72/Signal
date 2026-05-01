@@ -3,7 +3,14 @@ export const dynamic = "force-dynamic";
 import { getCoursesContainer, getLogsContainer } from "../lib/db";
 import UserInsights from "./UserInsights";
 import { ActivityLogEntry } from "../types";
-import { CourseWithOwner, formatTimestamp, ensureUserSummaries } from "./types";
+import {
+  buildTopicMetrics,
+  CourseWithOwner,
+  ensureUserSummaries,
+  formatPercent,
+  formatTimestamp,
+  getRequestedTopic,
+} from "./types";
 import OpenAI from "openai";
 import ReactMarkdown from "react-markdown";
 import UserManager from "./UserManager";
@@ -94,17 +101,17 @@ export default async function AdminDashboard() {
 
   if (!hasCosmosConfig) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-white flex items-center justify-center px-6">
-        <div className="max-w-2xl rounded-3xl border border-white/10 bg-white/5 p-8 text-center space-y-4">
-          <p className="text-sm uppercase tracking-[0.3em] text-neutral-500">
+      <div className="min-h-screen bg-slate-50 text-slate-950 flex items-center justify-center px-6">
+        <div className="max-w-2xl rounded-3xl border border-slate-200 bg-white p-8 text-center space-y-4">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">
             Admin Console
           </p>
           <h1 className="text-3xl font-semibold">
             Cosmos DB credentials are missing
           </h1>
-          <p className="text-sm text-neutral-400">
-            Set <code className="rounded bg-black/40 px-1 text-white">COSMOS_ENDPOINT</code> and{" "}
-            <code className="rounded bg-black/40 px-1 text-white">COSMOS_KEY</code> in your
+          <p className="text-sm text-slate-600">
+            Set <code className="rounded bg-white/90 px-1 text-slate-950">COSMOS_ENDPOINT</code> and{" "}
+            <code className="rounded bg-white/90 px-1 text-slate-950">COSMOS_KEY</code> in your
             deployment environment before running the admin dashboard.
           </p>
         </div>
@@ -124,40 +131,36 @@ export default async function AdminDashboard() {
     const right = a.lastLoginMs ?? 0;
     return left - right;
   });
+  const topicMetrics = buildTopicMetrics(logs, courses);
 
   const loginEvents = logs.filter((log) => log.eventType === "login").slice(0, 6);
-  const topicRequests = logs
-    .filter(
-      (log) =>
-        log.eventType === "generate_course" || log.eventType === "search"
-    )
-    .slice(0, 8);
+  const recentTopicCount = logs.filter((log) => getRequestedTopic(log)).length;
 
   const tutorChats = tutorLogs.filter((log) => log.eventType === "tutor_chat");
   const tutorSessions = tutorLogs.filter((log) => log.eventType === "tutor_session_start");
 
   return (
     <InstructorGuard>
-      <div className="min-h-screen bg-neutral-950 text-white">
-        <div className="max-w-6xl mx-auto px-6 py-10 space-y-10">
+      <div className="min-h-screen bg-slate-50 text-slate-950">
+        <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 sm:py-10 lg:space-y-10">
         <header className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-2">
-              <p className="text-sm uppercase tracking-[0.3em] text-neutral-400">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-600">
                 Admin Console
               </p>
-              <h1 className="text-4xl font-bold text-white">
+              <h1 className="text-3xl font-bold text-slate-950 sm:text-4xl">
                 Learner Signals &amp; Knowledge Gaps
               </h1>
             </div>
             <a
               href="/"
-              className="text-xs uppercase tracking-[0.2em] text-emerald-300 hover:text-emerald-200 transition"
+              className="text-xs uppercase tracking-[0.2em] text-emerald-700 hover:text-emerald-700 transition"
             >
               Back to Main
             </a>
           </div>
-          <p className="text-neutral-400 max-w-3xl">
+          <p className="text-slate-600 max-w-3xl">
             Review who is logging in, what they asked to learn, how courses are progressing, and where their quiz results expose potential topic gaps.
           </p>
         </header>
@@ -166,63 +169,121 @@ export default async function AdminDashboard() {
           {loginEvents.map((log) => (
             <article
               key={log.id}
-              className="p-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur"
+              className="p-4 rounded-2xl border border-slate-200 bg-white backdrop-blur"
             >
-              <div className="flex items-center justify-between text-xs uppercase text-neutral-500 mb-2">
+              <div className="flex items-center justify-between text-xs uppercase text-slate-500 mb-2">
                 <span>Login</span>
                 <span>{formatTimestamp(log.timestamp)}</span>
               </div>
               <p className="text-lg font-semibold">
                 {log.user ?? "anonymous"}
               </p>
-              <p className="text-sm text-neutral-400 mt-1">
+              <p className="text-sm text-slate-600 mt-1">
                 Session: {log.sessionId ?? "n/a"} • Source: {log.clientMeta?.userAgent ? "client" : "server"}
               </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {topicMetrics
+                  .filter((topic) => topic.username === (log.user ?? "anonymous"))
+                  .slice(0, 3)
+                  .map((topic) => (
+                    <span
+                      key={`${log.id}-${topic.key}`}
+                      className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700"
+                    >
+                      {topic.topic}
+                    </span>
+                  ))}
+              </div>
             </article>
           ))}
         </section>
 
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Recent Learner Topics</h2>
-            <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-              {topicRequests.length} entries
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">Topic Progress Metrics</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Recent requested topics joined with saved course progress and quiz performance.
+              </p>
+            </div>
+            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              {recentTopicCount} topic requests
             </span>
           </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            {topicRequests.map((log) => {
-              const topic =
-                log.request?.topic ??
-                (log.request?.query as string | undefined) ??
-                ((log as ActivityLogEntry & { query?: string }).query ?? "–");
+          <div className="grid gap-4 lg:grid-cols-2">
+            {topicMetrics.slice(0, 12).map((metric) => {
               return (
                 <article
-                  key={`${log.id}-${log.eventType}`}
-                  className="p-4 border border-white/10 rounded-2xl bg-neutral-900/40"
+                  key={metric.key}
+                  className="rounded-2xl border border-slate-200 bg-white p-4"
                 >
-                  <div className="flex justify-between items-center text-xs text-neutral-400 mb-2">
-                    <span>{log.eventType.replace("_", " ").toUpperCase()}</span>
-                    <span>{formatTimestamp(log.timestamp)}</span>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold uppercase tracking-[0.16em] text-slate-500">{metric.status === "active" ? "In progress" : metric.status === "not_started" ? "Not started" : "Requested"}</span>
+                    <span>{formatTimestamp(metric.requestedAt)}</span>
                   </div>
-                  <p className="text-neutral-200 text-sm">
-                    <span className="font-semibold text-white">
-                      {log.user ?? "anonymous"}
+                  <p className="text-sm text-slate-800">
+                    <span className="font-semibold text-slate-950">
+                      {metric.username}
                     </span>{" "}
                     asked for:
                   </p>
-                  <p className="text-lg font-medium text-emerald-300 mt-1 break-words">
-                    {topic}
+                  <p className="mt-1 break-words text-lg font-medium text-emerald-700">
+                    {metric.topic}
                   </p>
+                  {metric.courseTitle && metric.courseTitle !== metric.topic ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Course: {metric.courseTitle}
+                    </p>
+                  ) : null}
+                  <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                      <dt className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                        Complete
+                      </dt>
+                      <dd className="mt-1 text-xl font-semibold text-slate-950">
+                        {formatPercent(metric.completionPercent)}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                      <dt className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                        Accuracy
+                      </dt>
+                      <dd className="mt-1 text-xl font-semibold text-slate-950">
+                        {formatPercent(metric.accuracyPercent)}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                      <dt className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                        Chapters
+                      </dt>
+                      <dd className="mt-1 text-xl font-semibold text-slate-950">
+                        {metric.completedChapters}/{metric.totalChapters || "N/A"}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                      <dt className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                        Quizzes
+                      </dt>
+                      <dd className="mt-1 text-xl font-semibold text-slate-950">
+                        {metric.quizAttempts}/{metric.totalQuizzes || "N/A"}
+                      </dd>
+                    </div>
+                  </dl>
                 </article>
               );
             })}
+            {topicMetrics.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+                No topic requests or saved course progress yet.
+              </div>
+            ) : null}
           </div>
         </section>
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Tutor Access & Questions</h2>
-            <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
               {tutorLogs.length} events
             </span>
           </div>
@@ -230,16 +291,16 @@ export default async function AdminDashboard() {
             {tutorSessions.slice(0, 6).map((log) => (
               <article
                 key={log.id}
-                className="p-4 rounded-2xl border border-white/10 bg-white/5"
+                className="p-4 rounded-2xl border border-slate-200 bg-white"
               >
-                <div className="flex items-center justify-between text-xs uppercase text-neutral-500 mb-2">
+                <div className="flex items-center justify-between text-xs uppercase text-slate-500 mb-2">
                   <span>Tutor Session</span>
                   <span>{formatTimestamp(log.timestamp)}</span>
                 </div>
                 <p className="text-lg font-semibold">
                   {log.user ?? "student"}
                 </p>
-                <p className="text-sm text-neutral-400 mt-1">
+                <p className="text-sm text-slate-600 mt-1">
                   Course: {log.courseId ?? "unknown"} • Session: {log.sessionId ?? "n/a"}
                 </p>
               </article>
@@ -249,22 +310,22 @@ export default async function AdminDashboard() {
             {tutorChats.slice(0, 8).map((log) => (
               <article
                 key={log.id}
-                className="p-4 rounded-2xl border border-white/10 bg-neutral-900/50"
+                className="p-4 rounded-2xl border border-slate-200 bg-white"
               >
-                <div className="flex items-center justify-between text-xs uppercase text-neutral-500 mb-2">
+                <div className="flex items-center justify-between text-xs uppercase text-slate-500 mb-2">
                   <span>Tutor Chat</span>
                   <span>{formatTimestamp(log.timestamp)}</span>
                 </div>
-                <p className="text-sm text-neutral-400">
-                  Student: <span className="text-white">{log.user ?? "unknown"}</span> • Course:{" "}
-                  <span className="text-white">{log.courseId ?? "unknown"}</span>
+                <p className="text-sm text-slate-600">
+                  Student: <span className="text-slate-950">{log.user ?? "unknown"}</span> • Course:{" "}
+                  <span className="text-slate-950">{log.courseId ?? "unknown"}</span>
                 </p>
-                <p className="mt-2 text-sm text-neutral-300">
-                  <span className="font-semibold text-white">Q:</span>{" "}
+                <p className="mt-2 text-sm text-slate-700">
+                  <span className="font-semibold text-slate-950">Q:</span>{" "}
                   {log.request?.message ?? "n/a"}
                 </p>
-                <p className="mt-2 text-sm text-neutral-300">
-                  <span className="font-semibold text-white">A:</span>{" "}
+                <p className="mt-2 text-sm text-slate-700">
+                  <span className="font-semibold text-slate-950">A:</span>{" "}
                   {log.response?.answer ?? "n/a"}
                 </p>
               </article>
@@ -275,15 +336,15 @@ export default async function AdminDashboard() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Tutor Knowledge Gap Analysis</h2>
-            <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
               AI summary
             </span>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-neutral-200">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-800">
             {tutorAnalysis ? (
               <ReactMarkdown>{tutorAnalysis}</ReactMarkdown>
             ) : (
-              <p className="text-neutral-400">
+              <p className="text-slate-600">
                 Not enough tutor conversations yet to generate a summary.
               </p>
             )}
@@ -293,7 +354,7 @@ export default async function AdminDashboard() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Active Users</h2>
-            <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
               {userSummaries.length} users
             </span>
           </div>

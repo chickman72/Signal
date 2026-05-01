@@ -161,6 +161,157 @@ export async function getCourseMetrics(courseId: string): Promise<{
   };
 }
 
+export async function getSessionTrends(courseId: string): Promise<{
+  today: number;
+  last7Days: number;
+  last30Days: number;
+  last60Days: number;
+  last90Days: number;
+  last365Days: number;
+}> {
+  if (!courseId) {
+    return {
+      today: 0,
+      last7Days: 0,
+      last30Days: 0,
+      last60Days: 0,
+      last90Days: 0,
+      last365Days: 0,
+    };
+  }
+
+  const sessionsContainer = await getChatSessionsContainer();
+  const now = new Date();
+
+  // Calculate date ranges
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const last7Days = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const last30Days = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const last60Days = new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const last90Days = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const last365Days = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+  // Query sessions for each time period
+  const queries = [
+    {
+      name: 'today',
+      query: "SELECT VALUE COUNT(1) FROM c WHERE c.courseId = @courseId AND c.createdAt >= @startDate",
+      startDate: today.toISOString(),
+    },
+    {
+      name: 'last7Days',
+      query: "SELECT VALUE COUNT(1) FROM c WHERE c.courseId = @courseId AND c.createdAt >= @startDate",
+      startDate: last7Days.toISOString(),
+    },
+    {
+      name: 'last30Days',
+      query: "SELECT VALUE COUNT(1) FROM c WHERE c.courseId = @courseId AND c.createdAt >= @startDate",
+      startDate: last30Days.toISOString(),
+    },
+    {
+      name: 'last60Days',
+      query: "SELECT VALUE COUNT(1) FROM c WHERE c.courseId = @courseId AND c.createdAt >= @startDate",
+      startDate: last60Days.toISOString(),
+    },
+    {
+      name: 'last90Days',
+      query: "SELECT VALUE COUNT(1) FROM c WHERE c.courseId = @courseId AND c.createdAt >= @startDate",
+      startDate: last90Days.toISOString(),
+    },
+    {
+      name: 'last365Days',
+      query: "SELECT VALUE COUNT(1) FROM c WHERE c.courseId = @courseId AND c.createdAt >= @startDate",
+      startDate: last365Days.toISOString(),
+    },
+  ];
+
+  const results = await Promise.all(
+    queries.map(async ({ name, query, startDate }) => {
+      const { resources } = await sessionsContainer.items
+        .query({
+          query,
+          parameters: [
+            { name: "@courseId", value: courseId },
+            { name: "@startDate", value: startDate },
+          ],
+        })
+        .fetchAll();
+      return { name, count: resources?.[0] ?? 0 };
+    })
+  );
+
+  return {
+    today: results.find(r => r.name === 'today')?.count ?? 0,
+    last7Days: results.find(r => r.name === 'last7Days')?.count ?? 0,
+    last30Days: results.find(r => r.name === 'last30Days')?.count ?? 0,
+    last60Days: results.find(r => r.name === 'last60Days')?.count ?? 0,
+    last90Days: results.find(r => r.name === 'last90Days')?.count ?? 0,
+    last365Days: results.find(r => r.name === 'last365Days')?.count ?? 0,
+  };
+}
+
+export async function getDailySessionData(courseId: string, days: number): Promise<{
+  date: string;
+  sessions: number;
+  displayDate: string;
+}[]> {
+  if (!courseId || days <= 0) {
+    return [];
+  }
+
+  const sessionsContainer = await getChatSessionsContainer();
+  const now = new Date();
+  const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  // Get all sessions within the time period
+  const { resources } = await sessionsContainer.items
+    .query({
+      query: "SELECT c.createdAt FROM c WHERE c.courseId = @courseId AND c.createdAt >= @startDate ORDER BY c.createdAt",
+      parameters: [
+        { name: "@courseId", value: courseId },
+        { name: "@startDate", value: startDate.toISOString() },
+      ],
+    })
+    .fetchAll();
+
+  const sessions = resources as { createdAt?: string }[];
+
+  // Group sessions by date
+  const dailyCounts = new Map<string, number>();
+
+  // Initialize all dates in the range with 0
+  for (let i = 0; i < days; i++) {
+    const date = new Date(now.getTime() - (days - 1 - i) * 24 * 60 * 60 * 1000);
+    const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    dailyCounts.set(dateKey, 0);
+  }
+
+  // Count sessions for each date
+  sessions.forEach(session => {
+    if (session.createdAt) {
+      const sessionDate = new Date(session.createdAt);
+      const dateKey = sessionDate.toISOString().split('T')[0];
+      if (dailyCounts.has(dateKey)) {
+        dailyCounts.set(dateKey, (dailyCounts.get(dateKey) || 0) + 1);
+      }
+    }
+  });
+
+  // Convert to array format for the chart
+  const result = Array.from(dailyCounts.entries())
+    .sort(([a], [b]) => a.localeCompare(b)) // Sort by date ascending
+    .map(([dateKey, sessions]) => {
+      const date = new Date(dateKey + 'T00:00:00');
+      return {
+        date: dateKey,
+        sessions,
+        displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      };
+    });
+
+  return result;
+}
+
 export async function generateChatInsights(courseId: string) {
   if (!courseId) throw new Error("courseId is required.");
   const client = getOpenAIClient();

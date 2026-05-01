@@ -75,15 +75,15 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
       isCorrect: answers[idx] === true
     }));
     return (
-      <div className="bg-neutral-800/50 rounded-xl p-8 text-center space-y-4 border border-white/10">
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${passed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+      <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 text-center sm:p-8">
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${passed ? 'bg-emerald-500/20 text-emerald-700' : 'bg-red-500/20 text-red-700'}`}>
           {passed ? <CheckCircle className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
         </div>
         <h3 className="text-2xl font-bold">{passed ? 'Chapter Complete!' : 'Needs Review'}</h3>
-        <p className="text-neutral-400">You scored {score} out of {questions.length}</p>
+        <p className="text-slate-600">You scored {score} out of {questions.length}</p>
         
-        <div className="flex justify-center gap-3 pt-4">
-          <button onClick={resetQuiz} className="px-4 py-2 rounded-full bg-neutral-700 hover:bg-neutral-600 transition flex items-center gap-2 text-sm">
+        <div className="flex flex-col justify-center gap-3 pt-4 sm:flex-row">
+          <button onClick={resetQuiz} className="flex items-center justify-center gap-2 rounded-full bg-slate-200 px-4 py-2 text-sm transition hover:bg-slate-300">
             <RefreshCw className="w-4 h-4" /> Retry
           </button>
           
@@ -101,8 +101,8 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
 
   // ... (Keep the rest of the Question View return statement exactly as it was) ...
   return (
-    <div className="bg-neutral-800/50 rounded-xl p-6 border border-white/5">
-       <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-neutral-500 mb-4">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+       <div className="mb-4 flex flex-wrap justify-between gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
         <span>Question {currentIndex + 1} of {questions.length}</span>
         <span>Score: {score}</span>
       </div>
@@ -115,30 +115,30 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
           exit={{ opacity: 0, x: -20 }}
           className="space-y-6"
         >
-          <h4 className="text-lg font-medium text-white">{currentQuestion.question}</h4>
+          <h4 className="text-base font-medium text-slate-950 sm:text-lg">{currentQuestion.question}</h4>
 
           <div className="space-y-3">
             {currentQuestion.options.map((option, idx) => {
               const isSelected = selectedOption === idx;
               const isCorrect = idx === currentQuestion.correct_answer;
-              let style = "border-neutral-700 hover:bg-neutral-700/50";
-              if (isSelected) style = "border-indigo-500 bg-indigo-500/20 text-indigo-200";
+              let style = "border-slate-300 hover:bg-slate-100";
+              if (isSelected) style = "border-indigo-500 bg-indigo-500/20 text-indigo-800";
               if (isAnswered) {
-                 if (isCorrect) style = "border-emerald-500 bg-emerald-500/20 text-emerald-200";
-                 else if (isSelected && !isCorrect) style = "border-red-500 bg-red-500/20 text-red-200";
-                 else style = "border-neutral-700 opacity-50";
+                 if (isCorrect) style = "border-emerald-500 bg-emerald-500/20 text-emerald-700";
+                 else if (isSelected && !isCorrect) style = "border-red-500 bg-red-500/20 text-red-700";
+                 else style = "border-slate-300 opacity-50";
               }
               return (
                 <button
                   key={idx}
                   onClick={() => !isAnswered && setSelectedOption(idx)}
                   disabled={isAnswered}
-                  className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 ${style}`}
+                  className={`w-full rounded-lg border-2 p-3 text-left text-sm transition-all duration-200 sm:p-4 sm:text-base ${style}`}
                 >
                   <div className="flex items-center justify-between">
                     <span>{option}</span>
-                    {isAnswered && isCorrect && <CheckCircle className="w-5 h-5 text-emerald-400" />}
-                    {isAnswered && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-400" />}
+                    {isAnswered && isCorrect && <CheckCircle className="w-5 h-5 text-emerald-700" />}
+                    {isAnswered && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-700" />}
                   </div>
                 </button>
               );
@@ -147,19 +147,19 @@ export default function QuizPlayer({ questions, onComplete }: QuizPlayerProps) {
         </motion.div>
       </AnimatePresence>
 
-      <div className="mt-8 flex justify-end">
+      <div className="mt-8 flex justify-stretch sm:justify-end">
         {!isAnswered ? (
           <button 
             onClick={handleCheck}
             disabled={selectedOption === null}
-            className="px-6 py-2 bg-white text-black font-bold rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition"
+            className="w-full rounded-full bg-slate-900 px-6 py-2 font-bold text-white transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             Check Answer
           </button>
         ) : (
           <button 
             onClick={handleNext}
-            className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-full flex items-center gap-2 hover:bg-emerald-500 transition"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 py-2 font-bold text-white transition hover:bg-emerald-500 sm:w-auto"
           >
             {currentIndex === questions.length - 1 ? 'Finish Quiz' : 'Next Question'} <ArrowRight className="w-4 h-4" />
           </button>

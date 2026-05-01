@@ -28,11 +28,182 @@ export interface UserSummary {
   lastSearchMs?: number;
 }
 
+export interface TopicMetric {
+  key: string;
+  username: string;
+  topic: string;
+  requestedAt?: string;
+  eventType?: ActivityLogEntry["eventType"];
+  courseId?: string;
+  courseTitle?: string;
+  completionPercent: number | null;
+  accuracyPercent: number | null;
+  completedChapters: number;
+  totalChapters: number;
+  quizAttempts: number;
+  totalQuizzes: number;
+  status: "active" | "not_started" | "requested";
+}
+
 export function formatTimestamp(value?: string) {
   if (!value) return "Never";
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return value;
   return DATE_FORMATTER.format(parsed);
+}
+
+export function formatPercent(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "N/A";
+  return `${Math.round(value)}%`;
+}
+
+function normalizeTopic(value?: string) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function getRequestedTopic(log: ActivityLogEntry) {
+  const requestTopic =
+    log.request?.topic ??
+    (log.request?.query as string | undefined) ??
+    ((log as ActivityLogEntry & { query?: string }).query as string | undefined);
+  return typeof requestTopic === "string" && requestTopic.trim()
+    ? requestTopic.trim()
+    : undefined;
+}
+
+function courseMatchesTopic(course: CourseWithOwner, topic: string) {
+  const normalizedTitle = normalizeTopic(course.title);
+  const normalizedTopic = normalizeTopic(topic);
+  if (!normalizedTitle || !normalizedTopic) return false;
+  return (
+    normalizedTitle === normalizedTopic ||
+    normalizedTitle.includes(normalizedTopic) ||
+    normalizedTopic.includes(normalizedTitle)
+  );
+}
+
+function getCourseAccuracy(course?: CourseWithOwner) {
+  if (!course?.progress?.quizScores || !course.chapters?.length) return null;
+
+  let earned = 0;
+  let possible = 0;
+  course.chapters.forEach((chapter) => {
+    const score = course.progress?.quizScores?.[chapter.id];
+    if (typeof score !== "number") return;
+    earned += score;
+    possible += Math.max(chapter.quiz?.length ?? 0, 0);
+  });
+
+  if (possible <= 0) return null;
+  return Math.round((earned / possible) * 100);
+}
+
+function getCourseMetricBase(course?: CourseWithOwner) {
+  const completedChapters = course?.progress?.completedChapterIds?.length ?? 0;
+  const totalChapters =
+    course?.progress?.totalChapters ?? course?.chapters?.length ?? 0;
+  const quizAttempts = course?.progress?.quizScores
+    ? Object.keys(course.progress.quizScores).length
+    : 0;
+  const totalQuizzes = course?.chapters?.length ?? totalChapters;
+
+  return {
+    completionPercent: course?.progress?.percentComplete ?? null,
+    accuracyPercent: getCourseAccuracy(course) ?? course?.progress?.overallGrade ?? null,
+    completedChapters,
+    totalChapters,
+    quizAttempts,
+    totalQuizzes,
+    status: course
+      ? completedChapters > 0
+        ? "active"
+        : "not_started"
+      : "requested",
+  } satisfies Pick<
+    TopicMetric,
+    | "completionPercent"
+    | "accuracyPercent"
+    | "completedChapters"
+    | "totalChapters"
+    | "quizAttempts"
+    | "totalQuizzes"
+    | "status"
+  >;
+}
+
+export function buildTopicMetrics(
+  logs: ActivityLogEntry[],
+  courses: CourseWithOwner[],
+): TopicMetric[] {
+  const coursesById = new Map<string, CourseWithOwner>();
+  courses.forEach((course) => {
+    if (course.course_id) coursesById.set(course.course_id, course);
+    if ((course as CourseWithOwner & { id?: string }).id) {
+      coursesById.set((course as CourseWithOwner & { id?: string }).id!, course);
+    }
+  });
+
+  const seen = new Set<string>();
+  const metrics: TopicMetric[] = [];
+
+  logs
+    .filter((log) => log.eventType === "generate_course" || log.eventType === "search")
+    .forEach((log) => {
+      const topic = getRequestedTopic(log);
+      if (!topic) return;
+
+      const username = log.user || "anonymous";
+      const directCourse = log.courseId ? coursesById.get(log.courseId) : undefined;
+      const matchedCourse =
+        directCourse ??
+        courses.find(
+          (course) =>
+            (course.username || "anonymous") === username &&
+            courseMatchesTopic(course, topic),
+        );
+      const courseId = matchedCourse?.course_id ?? log.courseId;
+      const key = `${username}:${normalizeTopic(topic)}:${courseId ?? log.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      metrics.push({
+        key,
+        username,
+        topic,
+        requestedAt: log.timestamp,
+        eventType: log.eventType,
+        courseId,
+        courseTitle: matchedCourse?.title,
+        ...getCourseMetricBase(matchedCourse),
+      });
+    });
+
+  courses.forEach((course) => {
+    const username = course.username || "anonymous";
+    const key = `${username}:${normalizeTopic(course.title)}:${course.course_id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    metrics.push({
+      key,
+      username,
+      topic: course.title,
+      courseId: course.course_id,
+      courseTitle: course.title,
+      ...getCourseMetricBase(course),
+    });
+  });
+
+  return metrics.sort((a, b) => {
+    const left = Date.parse(a.requestedAt ?? "") || 0;
+    const right = Date.parse(b.requestedAt ?? "") || 0;
+    return right - left;
+  });
 }
 
 export function computeKnowledgeGaps(courses: CourseWithOwner[]): KnowledgeGap[] {
@@ -98,8 +269,7 @@ export function ensureUserSummaries(logs: ActivityLogEntry[], courses: CourseWit
     }
 
     if (log.eventType === "generate_course") {
-      const topic =
-        log.request?.topic ?? (log.request?.query as string | undefined);
+      const topic = getRequestedTopic(log);
       if (topic && (!summary.lastTopicMs || timestampMs > summary.lastTopicMs)) {
         summary.lastTopic = topic;
         summary.lastTopicMs = timestampMs;
@@ -107,8 +277,7 @@ export function ensureUserSummaries(logs: ActivityLogEntry[], courses: CourseWit
     }
 
     if (log.eventType === "search") {
-      const query = (log as ActivityLogEntry & { query?: string }).query;
-      const searchTerm = query ?? log.request?.query;
+      const searchTerm = getRequestedTopic(log);
       if (searchTerm && (!summary.lastSearchMs || timestampMs > summary.lastSearchMs)) {
         summary.lastSearch = searchTerm;
         summary.lastSearchMs = timestampMs;

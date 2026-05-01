@@ -24,9 +24,9 @@ const safeRandomId = () => {
 };
 
 const TRUST_STYLE_MAP: Record<VerificationResult['status'], { bg: string; border: string; text: string; icon: React.ReactNode }> = {
-  VERIFIED: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-300', icon: <CheckCircle className="w-5 h-5" /> },
-  CAUTION: { bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-300', icon: <AlertTriangle className="w-5 h-5" /> },
-  FLAGGED: { bg: 'bg-rose-500/10', border: 'border-rose-500/40', text: 'text-rose-300', icon: <AlertTriangle className="w-5 h-5" /> },
+  VERIFIED: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-700', icon: <CheckCircle className="w-5 h-5" /> },
+  CAUTION: { bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-700', icon: <AlertTriangle className="w-5 h-5" /> },
+  FLAGGED: { bg: 'bg-rose-500/10', border: 'border-rose-500/40', text: 'text-rose-700', icon: <AlertTriangle className="w-5 h-5" /> },
 };
 
 export default function SignalApp() {
@@ -54,6 +54,7 @@ export default function SignalApp() {
   const [progress, setProgress] = useState(0);
   const [loadingStep, setLoadingStep] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false); // <--- NEW MODAL STATE
   const [sessionId] = useState(() => safeRandomId());
   const [authMode, setAuthMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
@@ -114,6 +115,19 @@ export default function SignalApp() {
   const initialNotes = originalVerification?.notes;
 
   // --- PERSISTENCE ---
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const syncViewport = () => {
+      const isCompact = mediaQuery.matches;
+      setIsCompactViewport(isCompact);
+      setIsSidebarOpen(!isCompact);
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener('change', syncViewport);
+    return () => mediaQuery.removeEventListener('change', syncViewport);
+  }, []);
+
   useEffect(() => {
     const savedUser = localStorage.getItem('signal_user');
     
@@ -592,84 +606,84 @@ export default function SignalApp() {
 
   if (appState === 'AUTH') {
     return (
-      <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }} 
           animate={{ scale: 1, opacity: 1 }}
-          className="max-w-md w-full bg-neutral-800 rounded-2xl p-8 border border-white/10 shadow-2xl"
+          className="max-w-md w-full bg-white rounded-2xl p-8 border border-slate-200 shadow-2xl"
         >
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center shadow-lg shadow-emerald-900/50">
                <Lock className="w-8 h-8 text-white" />
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-center text-white mb-2">
+          <h2 className="text-3xl font-bold text-center text-slate-950 mb-2">
             {authMode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}
           </h2>
-          <p className="text-neutral-400 text-center mb-6">
+          <p className="text-slate-600 text-center mb-6">
             {authMode === 'LOGIN' ? 'Sign in to access your learning library.' : 'Create an account to get started.'}
           </p>
           <div className="flex justify-center gap-2 mb-4">
             <button
               onClick={() => { setAuthMode('LOGIN'); setAuthError(''); setPasswordInput(''); }}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'LOGIN' ? 'bg-white text-black' : 'bg-neutral-900 text-neutral-300 border border-white/10'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'LOGIN' ? 'bg-white text-slate-950' : 'bg-white text-slate-700 border border-slate-200'}`}
             >
               Login
             </button>
             <button
               onClick={() => { setAuthMode('SIGNUP'); setAuthError(''); setPasswordInput(''); }}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'SIGNUP' ? 'bg-white text-black' : 'bg-neutral-900 text-neutral-300 border border-white/10'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${authMode === 'SIGNUP' ? 'bg-white text-slate-950' : 'bg-white text-slate-700 border border-slate-200'}`}
             >
               Create account
             </button>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Email</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Email</label>
               <input
                 type="email"
                 value={emailInput}
                 onChange={e => setEmailInput(e.target.value)}
-                className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full mt-2 bg-white border border-slate-300 rounded-lg p-3 text-slate-950 focus:ring-2 focus:ring-emerald-500 outline-none"
                 placeholder="instructor@school.edu"
                 autoFocus
               />
             </div>
             <div>
-              <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Password</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Password</label>
               <input
                 type="password"
                 value={passwordInput}
                 onChange={e => setPasswordInput(e.target.value)}
-                className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full mt-2 bg-white border border-slate-300 rounded-lg p-3 text-slate-950 focus:ring-2 focus:ring-emerald-500 outline-none"
                 placeholder="••••••••"
               />
             </div>
             {authMode === 'SIGNUP' && (
               <div>
-                <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">Username (optional)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Username (optional)</label>
                 <input
                   type="text"
                   value={usernameInput}
                   onChange={e => setUsernameInput(e.target.value)}
-                  className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full mt-2 bg-white border border-slate-300 rounded-lg p-3 text-slate-950 focus:ring-2 focus:ring-emerald-500 outline-none"
                   placeholder="Dr. Smith"
                 />
               </div>
             )}
             {authMode === 'SIGNUP' && (
               <div>
-                <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider ml-1">About Me (optional)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">About Me (optional)</label>
                 <textarea
                   value={signupAbout}
                   onChange={e => setSignupAbout(e.target.value)}
-                  className="w-full mt-2 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none h-24 resize-none text-sm"
+                  className="w-full mt-2 bg-white border border-slate-300 rounded-lg p-3 text-slate-950 focus:ring-2 focus:ring-emerald-500 outline-none h-24 resize-none text-sm"
                   placeholder="e.g., I teach pharmacology to nursing students."
                 />
               </div>
             )}
             {authError && (
-              <div className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <div className="text-sm text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
                 {authError}
               </div>
             )}
@@ -683,7 +697,15 @@ export default function SignalApp() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white font-sans selection:bg-emerald-500/30 flex overflow-hidden">
+    <div className="min-h-screen bg-white text-slate-950 font-sans selection:bg-emerald-500/30 flex overflow-hidden">
+      {isCompactViewport && isSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-slate-900/30"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
       
       {/* SIDEBAR */}
       <Sidebar 
@@ -701,34 +723,34 @@ export default function SignalApp() {
       {/* PROFILE MODAL */}
       <AnimatePresence>
         {showProfileModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
              <motion.div 
                initial={{ scale: 0.9, opacity: 0 }}
                animate={{ scale: 1, opacity: 1 }}
                exit={{ scale: 0.9, opacity: 0 }}
-               className="w-full max-w-md bg-neutral-800 rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
+               className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl"
              >
-                <div className="p-6 border-b border-white/5 flex justify-between items-center">
+                <div className="p-6 border-b border-slate-200 flex justify-between items-center">
                   <h3 className="text-xl font-bold">Edit Profile</h3>
-                  <button onClick={() => setShowProfileModal(false)} className="text-neutral-400 hover:text-white">
+                  <button onClick={() => setShowProfileModal(false)} className="text-slate-600 hover:text-slate-950">
                     <X className="w-5 h-5"/>
                   </button>
                 </div>
                 <div className="p-6 space-y-4">
                    <div>
-                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">Username (optional)</label>
+                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Username (optional)</label>
                      <input 
                        value={editName}
                        onChange={e => setEditName(e.target.value)}
-                       className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:outline-none focus:border-emerald-500"
+                       className="w-full bg-white border border-slate-300 rounded-lg p-3 text-slate-950 focus:outline-none focus:border-emerald-500"
                      />
                    </div>
                    <div>
-                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">About Me (Context for AI)</label>
+                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">About Me (Context for AI)</label>
                      <textarea 
                        value={editAbout}
                        onChange={e => setEditAbout(e.target.value)}
-                       className="w-full h-32 bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white focus:outline-none focus:border-emerald-500 resize-none text-sm leading-relaxed"
+                       className="w-full h-32 bg-white border border-slate-300 rounded-lg p-3 text-slate-950 focus:outline-none focus:border-emerald-500 resize-none text-sm leading-relaxed"
                        placeholder="e.g. I am a cardiac nurse with 10 years experience. I prefer visual analogies."
                      />
                    </div>
@@ -747,18 +769,18 @@ export default function SignalApp() {
       {/* MAIN CONTENT AREA */}
       <motion.div 
         layout
-        className="flex-grow relative h-screen overflow-y-auto"
-        style={{ marginLeft: isSidebarOpen ? 280 : 0 }}
+        className="relative h-dvh flex-grow overflow-y-auto"
+        style={{ marginLeft: isSidebarOpen && !isCompactViewport ? 280 : 0 }}
       >
          {/* Toggle Sidebar Button */}
          <button 
            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-           className="absolute top-6 left-6 z-40 p-2 bg-neutral-800 rounded-full hover:bg-neutral-700 transition shadow-lg"
+           className="fixed left-4 top-4 z-40 rounded-full bg-white p-2 shadow-lg transition hover:bg-slate-200 sm:left-6 sm:top-6"
          >
-           <Menu className="w-5 h-5 text-neutral-400" />
+           <Menu className="w-5 h-5 text-slate-600" />
          </button>
 
-         <main className="max-w-4xl mx-auto px-4 py-20 min-h-[80vh]">
+         <main className="mx-auto min-h-[80vh] max-w-4xl px-4 py-16 sm:px-6 sm:py-20">
             
             <AnimatePresence mode="wait">
               {/* IDLE: SEARCH */}
@@ -768,20 +790,20 @@ export default function SignalApp() {
                    initial={{ opacity: 0, y: 20 }}
                    animate={{ opacity: 1, y: 0 }}
                    exit={{ opacity: 0, y: -20 }}
-                   className="text-center mt-20"
+                   className="mt-14 text-center sm:mt-20"
                 >
-                  <h1 className="text-5xl font-bold mb-6">
+                  <h1 className="mb-4 text-4xl font-bold sm:mb-6 sm:text-5xl">
                     {greetingName ? `Hello, ${greetingName}.` : 'Hello.'}
                   </h1>
-                  <p className="text-xl text-neutral-400 mb-8">What are we learning today?</p>
+                  <p className="mb-6 text-lg text-slate-600 sm:mb-8 sm:text-xl">What are we learning today?</p>
                   <form onSubmit={handleSearch} className="relative max-w-lg mx-auto">
                     <input
                       value={query}
                       onChange={e => setQuery(e.target.value)}
                       placeholder="e.g. Advanced Pharmacokinetics"
-                      className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-6 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all placeholder:text-neutral-600"
+                      className="w-full rounded-full border border-slate-300 bg-white px-5 py-4 pr-14 text-base transition-all placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:px-6 sm:text-lg"
                     />
-                    <button type="submit" className="absolute right-2 top-2 bg-white text-black p-2 rounded-full hover:bg-neutral-200">
+                    <button type="submit" className="absolute right-2 top-2 bg-white text-slate-950 p-2 rounded-full hover:bg-slate-100">
                       <ChevronRight />
                     </button>
                   </form>
@@ -792,24 +814,24 @@ export default function SignalApp() {
               {appState === 'GENERATING' && (
                  <motion.div key="gen" className="text-center mt-32">
                     <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mx-auto mb-6"/>
-                    <p className="text-xl text-neutral-300 animate-pulse">Designing your course...</p>
+                    <p className="text-xl text-slate-700 animate-pulse">Designing your course...</p>
                  </motion.div>
               )}
 
               {/* PLAYING */}
               {appState === 'PLAYING' && currentCourse && (
                  <motion.div key="play" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="mb-12 border-b border-white/10 pb-8">
-                       <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">{currentCourse.style} COURSE</span>
-                       <div className={`mt-3 inline-flex items-start gap-3 rounded-xl border px-4 py-3 ${trustStyle.bg} ${trustStyle.border}`}>
-                         <div className={`flex h-10 w-10 items-center justify-center rounded-full border ${trustStyle.border} bg-black/20`}>
+                    <div className="mb-8 border-b border-slate-200 pb-6 sm:mb-12 sm:pb-8">
+                       <span className="text-xs font-bold text-emerald-700 uppercase tracking-widest">{currentCourse.style} COURSE</span>
+                       <div className={`mt-3 flex w-full items-start gap-3 rounded-xl border px-4 py-3 sm:inline-flex sm:w-auto ${trustStyle.bg} ${trustStyle.border}`}>
+                         <div className={`flex h-10 w-10 items-center justify-center rounded-full border ${trustStyle.border} bg-slate-100/80`}>
                            {React.cloneElement(trustStyle.icon as React.ReactElement<any>, { className: `w-5 h-5 ${trustStyle.text}` })}
                          </div>
                          <div className="flex flex-col gap-1">
                            <div className="flex items-center gap-2">
-                             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Trust Signal</div>
+                             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Trust Signal</div>
                              {currentCourse.wasRefined && (
-                               <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                               <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
                                  Refined
                                </span>
                              )}
@@ -817,29 +839,29 @@ export default function SignalApp() {
                            {currentCourse.wasRefined ? (
                              <>
                                <div className="flex items-center gap-2 flex-wrap">
-                                 <span className="text-sm text-neutral-400 line-through">Initial {initialScore}%</span>
-                                 <span className="text-neutral-500 text-xs">-&gt;</span>
-                                 <span className="text-2xl font-bold text-white">{trustScore}%</span>
+                                 <span className="text-sm text-slate-600 line-through">Initial {initialScore}%</span>
+                                 <span className="text-slate-500 text-xs">-&gt;</span>
+                                 <span className="text-2xl font-bold text-slate-950">{trustScore}%</span>
                                  <span className={`text-sm font-semibold ${trustStyle.text}`}>{trustStatus}</span>
                                </div>
-                               <p className="text-xs text-neutral-200 leading-snug">Final: {trustNotes}</p>
+                               <p className="text-xs text-slate-800 leading-snug">Final: {trustNotes}</p>
                                {initialNotes && (
-                                 <p className="text-[11px] text-neutral-500 leading-snug">Initial: {initialNotes}</p>
+                                 <p className="text-[11px] text-slate-500 leading-snug">Initial: {initialNotes}</p>
                                )}
                              </>
                            ) : (
                              <>
                                <div className="flex items-baseline gap-2">
-                                 <span className="text-2xl font-bold text-white">{trustScore}%</span>
+                                 <span className="text-2xl font-bold text-slate-950">{trustScore}%</span>
                                  <span className={`text-sm font-semibold ${trustStyle.text}`}>{trustStatus}</span>
                                </div>
-                               <p className="text-xs text-neutral-200 leading-snug">{trustNotes}</p>
+                               <p className="text-xs text-slate-800 leading-snug">{trustNotes}</p>
                              </>
                            )}
                          </div>
                        </div>
-                       <h2 className="text-4xl font-bold mt-2">{currentCourse.title}</h2>
-                       <div className="mt-4 flex items-center gap-4 text-sm text-neutral-400">
+                       <h2 className="mt-3 text-3xl font-bold sm:text-4xl">{currentCourse.title}</h2>
+                       <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-600 sm:gap-4">
                           <span>{currentCourse.chapters.length} Chapters</span>
                           <span>•</span>
                           <span>{currentCourse.progress?.percentComplete || 0}% Complete</span>
@@ -862,29 +884,29 @@ export default function SignalApp() {
                                if (target.closest('[data-chapter-body="true"]')) return;
                                toggleChapter(chapter.id);
                              }}
-                             className={`rounded-2xl border cursor-pointer transition-all overflow-hidden ${isExpanded ? 'bg-neutral-800 border-emerald-500/50' : 'bg-neutral-900 border-neutral-800 hover:bg-neutral-800'}`}
+                             className={`rounded-2xl border cursor-pointer transition-all overflow-hidden ${isExpanded ? 'bg-white border-emerald-500/50' : 'bg-white border-slate-200 hover:bg-white'}`}
                            >
-                             <div className="p-6">
-                               <div className="flex items-center justify-between gap-3">
-                                 <h3 className={`text-xl font-bold ${isExpanded ? 'text-white' : 'text-neutral-400'}`}>
+                             <div className="p-4 sm:p-6">
+                               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                 <h3 className={`text-lg font-bold sm:text-xl ${isExpanded ? 'text-slate-950' : 'text-slate-600'}`}>
                                    {chapter.id}. {chapter.title}
                                  </h3>
-                                 <div className="flex items-center gap-2 text-xs">
-                                   <span className="text-neutral-500">Knowledge Check</span>
-                                   <span className="px-2 py-1 rounded-full bg-white/10 text-white font-semibold">{knowledgePercent}%</span>
-                                   <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90 text-emerald-400' : 'text-neutral-500'}`} />
+                                 <div className="flex items-center gap-2 text-xs sm:justify-end">
+                                   <span className="text-slate-500">Knowledge Check</span>
+                                   <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-950 font-semibold">{knowledgePercent}%</span>
+                                   <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90 text-emerald-700' : 'text-slate-500'}`} />
                                  </div>
                                </div>
                                <AnimatePresence>
                                  {isExpanded && (
                                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}>
-                                     <div data-chapter-body="true" className="pt-6 text-neutral-300 cursor-auto" onClick={e => e.stopPropagation()}>
-                                       <article className="prose prose-invert prose-emerald max-w-none prose-p:text-neutral-300 prose-p:leading-relaxed prose-headings:text-white prose-headings:font-bold prose-li:text-neutral-300 prose-strong:text-white prose-strong:font-bold">
+                                     <div data-chapter-body="true" className="pt-6 text-slate-700 cursor-auto" onClick={e => e.stopPropagation()}>
+                                       <article className="prose prose-emerald max-w-none prose-p:text-slate-700 prose-p:leading-relaxed prose-headings:text-slate-950 prose-headings:font-bold prose-li:text-slate-700 prose-strong:text-slate-950 prose-strong:font-bold">
                                          <ReactMarkdown>{chapter.content_markdown}</ReactMarkdown>
                                        </article>
  
-                                       <div className="mt-8 pt-8 border-t border-white/5">
-                                            <div className="flex items-center gap-2 mb-4 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                                       <div className="mt-8 pt-8 border-t border-slate-200">
+                                            <div className="flex items-center gap-2 mb-4 text-emerald-700 text-xs font-bold uppercase tracking-wider">
                                                <CheckCircle className="w-4 h-4" /> Knowledge Check
                                             </div>
                                             <QuizPlayer 
@@ -904,26 +926,26 @@ export default function SignalApp() {
                                                }}
                                             />
                                             {quizHistory[currentCourse.course_id]?.[chapter.id] && (
-                                              <div className="mt-4 p-4 rounded-lg bg-neutral-900/70 border border-white/5">
-                                                <div className="text-sm font-semibold text-white mb-3">Your last answers</div>
+                                              <div className="mt-4 p-4 rounded-lg bg-white border border-slate-200">
+                                                <div className="text-sm font-semibold text-slate-950 mb-3">Your last answers</div>
                                                 <div className="space-y-3">
                                                   {quizHistory[currentCourse.course_id][chapter.id].map((entry, idx) => {
                                                     const correctText = entry.question.options[entry.question.correct_answer] ?? '';
                                                     const chosen = typeof entry.selectedOption === 'number' ? entry.question.options[entry.selectedOption] : 'No answer';
                                                     return (
-                                                      <div key={idx} className="text-sm text-neutral-300 border-b border-white/5 pb-2 last:border-b-0 last:pb-0">
-                                                        <div className="font-medium text-white mb-1">{idx + 1}. {entry.question.question}</div>
+                                                      <div key={idx} className="text-sm text-slate-700 border-b border-slate-200 pb-2 last:border-b-0 last:pb-0">
+                                                        <div className="font-medium text-slate-950 mb-1">{idx + 1}. {entry.question.question}</div>
                                                         <div className="text-xs">
-                                                          <span className={`font-semibold ${entry.isCorrect ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                          <span className={`font-semibold ${entry.isCorrect ? 'text-emerald-700' : 'text-amber-700'}`}>
                                                             {entry.isCorrect ? 'Correct' : 'Incorrect'}
                                                           </span>
-                                                          <span className="text-neutral-500"> — You chose: </span>
-                                                          <span className="text-white">{chosen}</span>
+                                                          <span className="text-slate-500"> — You chose: </span>
+                                                          <span className="text-slate-950">{chosen}</span>
                                                         </div>
                                                         {!entry.isCorrect && (
                                                           <div className="mt-2">
                                                             <button
-                                                              className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+                                                              className="text-xs text-emerald-700 hover:text-emerald-700 underline"
                                                               onClick={async () => {
                                                                 setQuestionInsightLoading(prev => ({
                                                                   ...prev,
@@ -958,18 +980,18 @@ export default function SignalApp() {
                                                               Tell me more
                                                             </button>
                                                             {questionInsightLoading[chapter.id]?.[idx] && (
-                                                              <span className="ml-2 text-xs text-neutral-400">Loading…</span>
+                                                              <span className="ml-2 text-xs text-slate-600">Loading…</span>
                                                             )}
                                                             {questionInsights[chapter.id]?.[idx] && (
-                                                              <div className="mt-2 prose prose-invert text-neutral-200 max-w-none">
+                                                              <div className="mt-2 prose text-slate-800 max-w-none">
                                                                 <ReactMarkdown>{questionInsights[chapter.id][idx]}</ReactMarkdown>
                                                               </div>
                                                             )}
                                                           </div>
                                                         )}
                                                         {!entry.isCorrect && (
-                                                          <div className="text-xs text-neutral-500 mt-1">
-                                                            Correct answer: <span className="text-white">{correctText}</span>
+                                                          <div className="text-xs text-slate-500 mt-1">
+                                                            Correct answer: <span className="text-slate-950">{correctText}</span>
                                                           </div>
                                                         )}
                                                       </div>
@@ -979,15 +1001,15 @@ export default function SignalApp() {
                                               </div>
                                             )}
                                             {remediationLoading[chapter.id] && (
-                                              <div className="mt-4 text-sm text-neutral-400">Building a focused review...</div>
+                                              <div className="mt-4 text-sm text-slate-600">Building a focused review...</div>
                                             )}
                                             {remediations[chapter.id] && (
-                                              <div className="mt-6 p-5 rounded-xl border border-white/10 bg-neutral-800/60">
+                                              <div className="mt-6 p-5 rounded-xl border border-slate-200 bg-white">
                                                 <div className="flex items-center justify-between mb-3">
-                                                  <span className="text-sm font-semibold text-white">Targeted Review</span>
-                                                  <span className="text-xs text-neutral-400">Missed concepts</span>
+                                                  <span className="text-sm font-semibold text-slate-950">Targeted Review</span>
+                                                  <span className="text-xs text-slate-600">Missed concepts</span>
                                                 </div>
-                                                <div className="prose prose-invert text-neutral-300 max-w-none">
+                                                <div className="prose text-slate-700 max-w-none">
                                                   <ReactMarkdown>{remediations[chapter.id].explanation_markdown}</ReactMarkdown>
                                                 </div>
                                                 <div className="mt-4">

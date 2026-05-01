@@ -9,6 +9,7 @@ const MAX_ATTEMPTS = 3;
 const generationModels = ['gpt-4o-mini', 'gpt-4o-mini', 'gpt-4o'] as const;
 const MIN_TRUST_SIGNAL_SCORE = 85;
 const MIN_COMPLETION_TOKENS = 4096;
+const DEFAULT_FAST_MODEL = "gpt-4o-mini";
 let openaiClient: OpenAI | null = null;
 
 function getOpenAIClient() {
@@ -26,6 +27,10 @@ function getOpenAIClient() {
 function requireOpenAIModel() {
   if (!openaiModel) throw new Error("Missing OPENAI_MODEL.");
   return openaiModel;
+}
+
+function getOpenAIModelOrDefault() {
+  return openaiModel || DEFAULT_FAST_MODEL;
 }
 
 async function verifyCourseContent(course: Course): Promise<VerificationResult> {
@@ -489,6 +494,52 @@ interface RemediationRequest {
   username?: string;
 }
 
+function normalizeQuizQuestion(question: Partial<QuizQuestion>, fallbackIndex: number): QuizQuestion {
+  const options = Array.isArray(question.options) && question.options.length >= 2
+    ? question.options.map(option => String(option)).slice(0, 4)
+    : ["Review the source material", "Guess without evidence", "Ignore the concept", "Skip the question"];
+
+  while (options.length < 4) {
+    options.push(`Option ${options.length + 1}`);
+  }
+
+  const correct = Number.isInteger(question.correct_answer) ? Number(question.correct_answer) : 0;
+
+  return {
+    question: String(question.question || `Review question ${fallbackIndex + 1}`),
+    options,
+    correct_answer: Math.max(0, Math.min(options.length - 1, correct)),
+  };
+}
+
+function buildFallbackRemediation(
+  chapterTitle: string,
+  missedQuestions: QuizQuestion[],
+): { explanation_markdown: string; quiz: QuizQuestion[] } {
+  const missed = missedQuestions.slice(0, 4);
+  const explanation = missed.length > 0
+    ? missed.map((question, idx) => {
+      const correct = question.options?.[question.correct_answer] ?? "Review the chapter material.";
+      return `- **Question ${idx + 1}:** Revisit the chapter section connected to "${question.question}". The correct idea to anchor on is: ${correct}`;
+    }).join('\n\n')
+    : [`- **${chapterTitle}:** Revisit the chapter's bottom-line definitions, mechanisms, and scenario examples before retrying the knowledge check.`].join('\n\n');
+
+  const quiz = missed.length > 0
+    ? missed.map((question, idx) => normalizeQuizQuestion(question, idx))
+    : [
+      {
+        question: `What is the best next step when reviewing ${chapterTitle}?`,
+        options: ["Reread the key definition and mechanism", "Skip the evidence", "Ignore missed concepts", "Memorize without context"],
+        correct_answer: 0,
+      },
+    ];
+
+  return {
+    explanation_markdown: `### Targeted Review\n\n${explanation}`,
+    quiz,
+  };
+}
+
 export async function generateRemediation(request: RemediationRequest): Promise<{ explanation_markdown: string; quiz: QuizQuestion[] }> {
   const { courseTitle, chapterTitle, chapterContent, missedQuestions, userContext = "", username } = request;
 
@@ -528,7 +579,7 @@ export async function generateRemediation(request: RemediationRequest): Promise<
     });
 
     const completion = await getOpenAIClient().chat.completions.create({
-      model: requireOpenAIModel(),
+      model: getOpenAIModelOrDefault(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Missed questions:\n${missedList}` },
@@ -541,6 +592,13 @@ export async function generateRemediation(request: RemediationRequest): Promise<
     if (!content) throw new Error("No remediation generated");
 
     const parsed = JSON.parse(content) as { explanation_markdown: string; quiz: QuizQuestion[] };
+    const quiz = Array.isArray(parsed.quiz)
+      ? parsed.quiz.slice(0, 4).map((question, idx) => normalizeQuizQuestion(question, idx))
+      : [];
+
+    if (!parsed.explanation_markdown || quiz.length === 0) {
+      throw new Error("Remediation response missing required fields.");
+    }
 
     await logEvent('remediation_request', {
       user: username,
@@ -553,16 +611,25 @@ export async function generateRemediation(request: RemediationRequest): Promise<
       response: { generatedQuiz: parsed.quiz?.length ?? 0 }
     });
 
-    return parsed;
+    return {
+      explanation_markdown: parsed.explanation_markdown,
+      quiz,
+    };
   } catch (error) {
+    const fallback = buildFallbackRemediation(chapterTitle, missedQuestions);
+
     await logEvent('error', {
       user: username,
       success: false,
       request: { courseTitle, chapterTitle, missed: missedQuestions.length },
-      response: { message: 'Failed to generate remediation', error: String(error) }
+      response: {
+        message: 'Generated local fallback remediation after model failure',
+        error: String(error),
+        generatedQuiz: fallback.quiz.length,
+      }
     });
     console.error("Remediation generation failed:", error);
-    throw new Error("Failed to generate remediation.");
+    return fallback;
   }
 }
 
@@ -594,7 +661,7 @@ export async function generateQuestionInsight(request: QuestionInsightRequest): 
     });
 
     const completion = await getOpenAIClient().chat.completions.create({
-      model: requireOpenAIModel(),
+      model: getOpenAIModelOrDefault(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Question: ${question.question}\nOptions: ${question.options.join(' | ')}\nCorrect answer: ${correctOption}` },

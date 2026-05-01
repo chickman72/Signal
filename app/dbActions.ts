@@ -15,6 +15,15 @@ function verifyPassword(password: string, hash: string, salt: string) {
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(derived, 'hex'));
 }
 
+async function saveUserRecord(container: Awaited<ReturnType<typeof getUsersContainer>>, user: User & Record<string, any>) {
+  const id = user.id ?? user.username ?? user.email;
+  if (!id) {
+    throw new Error("User record is missing an id.");
+  }
+  await container.items.upsert({ ...user, id });
+  return { ...user, id } as User & Record<string, any>;
+}
+
 // --- USER ACTIONS ---
 export async function getOrCreateUser(email: string): Promise<User> {
   const container = await getUsersContainer();
@@ -50,11 +59,11 @@ export async function updateUserProfile(
   const trimmedDisplayName = displayName.trim();
   const updated = {
     ...user,
+    id: (user as User & { id?: string }).id ?? user.username ?? email,
     aboutMe,
     displayName: trimmedDisplayName ? trimmedDisplayName : undefined,
   };
-  await container.item(user.username, user.username).replace(updated as any);
-  return updated;
+  return saveUserRecord(container, updated as User & Record<string, any>);
 }
 
 export async function loginUser(email: string, password: string): Promise<User> {
@@ -78,16 +87,16 @@ export async function loginUser(email: string, password: string): Promise<User> 
   if (!user.role) {
     const updated = {
       ...user,
+      id: user.id ?? user.username ?? user.email,
       role: "student" as const,
       displayName: user.displayName ?? (user.username !== user.email ? user.username : undefined),
     };
-    await container.item(user.username, user.username).replace(updated as any);
-    return updated;
+    return saveUserRecord(container, updated);
   }
   if (!user.passwordHash || !user.passwordSalt) {
     const { hash, salt } = hashPassword(password);
-    const updated = { ...user, passwordHash: hash, passwordSalt: salt };
-    await container.item(user.username, user.username).replace(updated as any);
+    const updated = { ...user, id: user.id ?? user.username ?? user.email, passwordHash: hash, passwordSalt: salt };
+    await saveUserRecord(container, updated);
   } else if (!verifyPassword(password, user.passwordHash, user.passwordSalt)) {
     throw new Error('Invalid password.');
   }
@@ -100,7 +109,7 @@ export async function signupUser(
   password: string,
   displayName: string = '',
   aboutMe: string = '',
-  role: 'student' | 'instructor' | 'administrator' = 'student',
+  role: 'student' | 'administrator' = 'student',
 ): Promise<User> {
   const container = await getUsersContainer();
   const normalizedEmail = email.trim().toLowerCase();

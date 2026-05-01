@@ -47,6 +47,7 @@ export interface CourseProgress {
 export interface Course {
   course_id: string;
   title: string;
+  domain?: string;
   style: string;
   chapters: Chapter[];
   // Merge progress directly into the course object for easier UI handling
@@ -59,23 +60,14 @@ export interface Course {
   quizHistory?: Record<number, QuizAnswer[]>;
 }
 
-export interface InstructorCourse {
-  id: string;
-  title: string;
-  description?: string;
-  tutorMode: 'simulation' | 'course_tutor';
-  systemPrompt: string;
-  starterPrompts: string[];
-  instructorId: string;
-  createdAt?: string;
-  lastUpdated?: string;
-}
-
 export interface User {
   id?: string;
   username: string;
   aboutMe?: string; // <--- NEW FIELD
-  role?: 'student' | 'instructor' | 'administrator';
+  domain?: string;
+  fieldOfStudy?: string;
+  profession?: string;
+  role?: 'student' | 'administrator';
   email?: string;
   createdAt?: string;
   displayName?: string;

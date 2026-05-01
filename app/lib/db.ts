@@ -39,36 +39,3 @@ export async function getLogsContainer() {
   const database = c.database('SignalApp');
   return database.container('ActivityLogs');
 }
-
-export async function getDocumentsContainer() {
-  const c = getClient();
-  if (!c) throw new Error("Database not connected");
-  const database = c.database('SignalApp');
-  const { container } = await database.containers.createIfNotExists({
-    id: "Documents",
-    partitionKey: { paths: ["/courseId"] },
-  });
-  return container;
-}
-
-export async function getChatSessionsContainer() {
-  const c = getClient();
-  if (!c) throw new Error("Database not connected");
-  const database = c.database('SignalApp');
-  const { container } = await database.containers.createIfNotExists({
-    id: "ChatSessions",
-    partitionKey: { paths: ["/id"] },
-  });
-  return container;
-}
-
-export async function getInstructorCoursesContainer() {
-  const c = getClient();
-  if (!c) throw new Error("Database not connected");
-  const database = c.database('SignalApp');
-  const { container } = await database.containers.createIfNotExists({
-    id: "InstructorCourses",
-    partitionKey: { paths: ["/instructorId"] },
-  });
-  return container;
-}

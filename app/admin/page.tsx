@@ -11,15 +11,12 @@ import {
   formatTimestamp,
   getRequestedTopic,
 } from "./types";
-import OpenAI from "openai";
-import ReactMarkdown from "react-markdown";
 import UserManager from "./UserManager";
 import { fetchUsers } from "../actions/users";
-import InstructorGuard from "../instructor/InstructorGuard";
+import AdminGuard from "./AdminGuard";
 
 const RECENT_LOG_LIMIT = 80;
 const RECENT_COURSE_LIMIT = 80;
-const RECENT_TUTOR_LOG_LIMIT = 120;
 
 async function fetchRecentLogs() {
   const container = await getLogsContainer();
@@ -27,17 +24,6 @@ async function fetchRecentLogs() {
     .query({
       query: "SELECT * FROM c ORDER BY c.timestamp DESC OFFSET 0 LIMIT @limit",
       parameters: [{ name: "@limit", value: RECENT_LOG_LIMIT }],
-    })
-    .fetchAll();
-  return (resources ?? []) as ActivityLogEntry[];
-}
-
-async function fetchTutorLogs() {
-  const container = await getLogsContainer();
-  const { resources } = await container.items
-    .query({
-      query: "SELECT * FROM c WHERE c.eventType IN ('tutor_session_start', 'tutor_chat') ORDER BY c.timestamp DESC OFFSET 0 LIMIT @limit",
-      parameters: [{ name: "@limit", value: RECENT_TUTOR_LOG_LIMIT }],
     })
     .fetchAll();
   return (resources ?? []) as ActivityLogEntry[];
@@ -52,47 +38,6 @@ async function fetchRecentCourses() {
     })
     .fetchAll();
   return (resources ?? []) as CourseWithOwner[];
-}
-
-async function generateTutorGapAnalysis(logs: ActivityLogEntry[]) {
-  if (!process.env.OPENAI_API_KEY) return null;
-  if (!logs.length) return null;
-  const openaiModel = process.env.OPENAI_MODEL;
-  if (!openaiModel) return null;
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.OPENAI_BASE_URL,
-  });
-
-  const samples = logs
-    .filter((log) => log.eventType === "tutor_chat")
-    .slice(0, 40)
-    .map((log) => ({
-      user: log.user,
-      courseId: log.courseId,
-      timestamp: log.timestamp,
-      question: log.request?.message,
-      answer: log.response?.answer,
-    }));
-
-  const prompt = `
-You are an educational analyst. Analyze the tutor conversation samples and identify:
-1) The top 3-5 knowledge gaps (topic + short rationale).
-2) Which courses those gaps appear in (courseId).
-3) Suggested remediation strategies.
-Respond in concise markdown with headings and bullet points.
-`.trim();
-
-  const completion = await openai.chat.completions.create({
-    model: openaiModel,
-    messages: [
-      { role: "system", content: prompt },
-      { role: "user", content: JSON.stringify(samples) },
-    ],
-  });
-
-  return completion.choices[0]?.message?.content ?? null;
 }
 
 export default async function AdminDashboard() {
@@ -119,13 +64,11 @@ export default async function AdminDashboard() {
     );
   }
 
-  const [logs, courses, tutorLogs, users] = await Promise.all([
+  const [logs, courses, users] = await Promise.all([
     fetchRecentLogs(),
     fetchRecentCourses(),
-    fetchTutorLogs(),
     fetchUsers(),
   ]);
-  const tutorAnalysis = await generateTutorGapAnalysis(tutorLogs);
   const userSummaries = ensureUserSummaries(logs, courses).sort((a, b) => {
     const left = b.lastLoginMs ?? 0;
     const right = a.lastLoginMs ?? 0;
@@ -136,11 +79,8 @@ export default async function AdminDashboard() {
   const loginEvents = logs.filter((log) => log.eventType === "login").slice(0, 6);
   const recentTopicCount = logs.filter((log) => getRequestedTopic(log)).length;
 
-  const tutorChats = tutorLogs.filter((log) => log.eventType === "tutor_chat");
-  const tutorSessions = tutorLogs.filter((log) => log.eventType === "tutor_session_start");
-
   return (
-    <InstructorGuard>
+    <AdminGuard>
       <div className="min-h-screen bg-slate-50 text-slate-950">
         <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 sm:py-10 lg:space-y-10">
         <header className="space-y-3">
@@ -282,77 +222,6 @@ export default async function AdminDashboard() {
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Tutor Access & Questions</h2>
-            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
-              {tutorLogs.length} events
-            </span>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            {tutorSessions.slice(0, 6).map((log) => (
-              <article
-                key={log.id}
-                className="p-4 rounded-2xl border border-slate-200 bg-white"
-              >
-                <div className="flex items-center justify-between text-xs uppercase text-slate-500 mb-2">
-                  <span>Tutor Session</span>
-                  <span>{formatTimestamp(log.timestamp)}</span>
-                </div>
-                <p className="text-lg font-semibold">
-                  {log.user ?? "student"}
-                </p>
-                <p className="text-sm text-slate-600 mt-1">
-                  Course: {log.courseId ?? "unknown"} • Session: {log.sessionId ?? "n/a"}
-                </p>
-              </article>
-            ))}
-          </div>
-          <div className="space-y-4">
-            {tutorChats.slice(0, 8).map((log) => (
-              <article
-                key={log.id}
-                className="p-4 rounded-2xl border border-slate-200 bg-white"
-              >
-                <div className="flex items-center justify-between text-xs uppercase text-slate-500 mb-2">
-                  <span>Tutor Chat</span>
-                  <span>{formatTimestamp(log.timestamp)}</span>
-                </div>
-                <p className="text-sm text-slate-600">
-                  Student: <span className="text-slate-950">{log.user ?? "unknown"}</span> • Course:{" "}
-                  <span className="text-slate-950">{log.courseId ?? "unknown"}</span>
-                </p>
-                <p className="mt-2 text-sm text-slate-700">
-                  <span className="font-semibold text-slate-950">Q:</span>{" "}
-                  {log.request?.message ?? "n/a"}
-                </p>
-                <p className="mt-2 text-sm text-slate-700">
-                  <span className="font-semibold text-slate-950">A:</span>{" "}
-                  {log.response?.answer ?? "n/a"}
-                </p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Tutor Knowledge Gap Analysis</h2>
-            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
-              AI summary
-            </span>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-800">
-            {tutorAnalysis ? (
-              <ReactMarkdown>{tutorAnalysis}</ReactMarkdown>
-            ) : (
-              <p className="text-slate-600">
-                Not enough tutor conversations yet to generate a summary.
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Active Users</h2>
             <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
               {userSummaries.length} users
@@ -364,6 +233,6 @@ export default async function AdminDashboard() {
         <UserManager users={users} />
         </div>
       </div>
-    </InstructorGuard>
+    </AdminGuard>
   );
 }

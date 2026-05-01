@@ -645,7 +645,7 @@ export default function SignalApp() {
                 value={emailInput}
                 onChange={e => setEmailInput(e.target.value)}
                 className="w-full mt-2 bg-white border border-slate-300 rounded-lg p-3 text-slate-950 focus:ring-2 focus:ring-emerald-500 outline-none"
-                placeholder="instructor@school.edu"
+                placeholder="learner@school.edu"
                 autoFocus
               />
             </div>
@@ -774,8 +774,19 @@ export default function SignalApp() {
       >
          {/* Toggle Sidebar Button */}
          <button 
+           type="button"
+           aria-label={isSidebarOpen ? "Close library" : "Open library"}
            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-           className="fixed left-4 top-4 z-40 rounded-full bg-white p-2 shadow-lg transition hover:bg-slate-200 sm:left-6 sm:top-6"
+           className="fixed top-4 z-50 rounded-full bg-white p-2 shadow-lg transition hover:bg-slate-200 sm:top-6"
+           style={{
+             left: isSidebarOpen
+               ? isCompactViewport
+                 ? "min(calc(86vw + 0.75rem), 18.25rem)"
+                 : "18.5rem"
+               : isCompactViewport
+                 ? "1rem"
+                 : "1.5rem",
+           }}
          >
            <Menu className="w-5 h-5 text-slate-600" />
          </button>

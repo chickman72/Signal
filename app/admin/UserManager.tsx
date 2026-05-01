@@ -59,7 +59,6 @@ export default function UserManager({ users }: UserManagerProps) {
           defaultValue="student"
         >
           <option value="student">Student</option>
-          <option value="instructor">Instructor</option>
           <option value="administrator">Administrator</option>
         </select>
         <button
@@ -137,7 +136,6 @@ function UserRow({ user }: { user: User }) {
         className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-950 focus:border-emerald-400 focus:outline-none"
       >
         <option value="student">Student</option>
-        <option value="instructor">Instructor</option>
         <option value="administrator">Administrator</option>
       </select>
         <span className="text-slate-600">

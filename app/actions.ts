@@ -1,8 +1,8 @@
 'use server'
 
 import OpenAI from 'openai';
-import { Course, QuizQuestion, VerificationResult } from './types';
-import { logEvent } from './dbActions';
+import { Course, QuizQuestion, User, VerificationResult } from './types';
+import { getOrCreateUser, logEvent } from './dbActions';
 
 const openaiModel = process.env.OPENAI_MODEL ?? "";
 let openaiClient: OpenAI | null = null;
@@ -98,31 +98,130 @@ async function refineCourseContent(course: Course, feedback: VerificationResult)
   }
 }
 
-// Update function signature to accept userContext
+async function generateInitialDraft(systemPrompt: string, userTopic: string) {
+  const completion = await getOpenAIClient().chat.completions.create({
+    model: requireOpenAIModel(),
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Create a course on: "${userTopic}"` },
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  const content = completion.choices[0].message.content;
+  if (!content) throw new Error("No content generated");
+  return content;
+}
+
+async function evaluateTrustSignal(draftText: string) {
+  const completion = await getOpenAIClient().chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an academic compliance evaluator. Review the following educational text. Does it include specific references to empirical evidence, peer-reviewed studies, or established academic frameworks to support its claims? \n- If YES, respond ONLY with 'PASS'. \n- If NO, respond with 'FAIL: [Explain exactly which claims need evidence or framing adjustments to be academically safe].'",
+      },
+      { role: "user", content: draftText },
+    ],
+  });
+
+  return completion.choices[0].message.content?.trim() ?? "FAIL: No evaluator response.";
+}
+
+async function reviseDraft(draftText: string, critique: string) {
+  const completion = await getOpenAIClient().chat.completions.create({
+    model: requireOpenAIModel(),
+    messages: [
+      {
+        role: "system",
+        content: `You are an academic editor. Rewrite the following text to resolve this critique: ${critique}. You MUST add realistic, established academic references, theories, or explicitly frame the concepts as 'theoretical best practices' rather than unproven scientific facts. Maintain the original formatting. Return ONLY the complete revised JSON object, preserving the original schema and field names.`,
+      },
+      { role: "user", content: draftText },
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  const content = completion.choices[0].message.content;
+  if (!content) throw new Error("No revised draft returned");
+  return content;
+}
+
+function inferDomainFromText(value?: string) {
+  const text = value?.trim();
+  if (!text) return "";
+
+  const explicitMatch = text.match(
+    /\b(?:field of study|field|domain|profession|role|work(?:ing)? in|student in|studying)\s*(?:is|:|=|as)?\s*([^.;,\n]+)/i,
+  );
+  if (explicitMatch?.[1]) return explicitMatch[1].trim();
+
+  return text.length <= 80 ? text : "";
+}
+
+async function resolveUserDomain(username: string | undefined, userContext: string) {
+  let profile: User | null = null;
+
+  if (username) {
+    try {
+      profile = await getOrCreateUser(username);
+    } catch {
+      profile = null;
+    }
+  }
+
+  return (
+    profile?.fieldOfStudy?.trim() ||
+    profile?.profession?.trim() ||
+    profile?.domain?.trim() ||
+    inferDomainFromText(profile?.aboutMe) ||
+    inferDomainFromText(userContext) ||
+    "General Subject Matter"
+  );
+}
+
 export async function generateCourse(userTopic: string, userContext: string = "", username?: string): Promise<Course> {
   if (!userTopic) throw new Error("Topic is required");
 
-  // Incorporate the "About Me" context into the system prompt
-  const systemPrompt = `
-    You are an expert educational architect.
-    
-    USER CONTEXT: The user has described themselves as: "${userContext}". 
-    ADAPTATION INSTRUCTION: Adjust the tone, complexity, and analogies of the course to fit this user's background.
+  const userDomain = await resolveUserDomain(username, userContext);
 
-    Goal: Generate a structured, multi-modal course.
-    
-    Adhere to this JSON schema:
+  const systemPrompt = `
+    You are an expert instructor in ${userDomain}. Your goal is to create high-yield, bite-sized study materials for students in this field.
+
+    USER CONTEXT: The user has described themselves as: "${userContext || "No additional profile context provided"}".
+    COURSE TOPIC: "${userTopic}"
+
+    MICROlearning RULES:
+    - You MUST NOT write any paragraph longer than 3 sentences. Be punchy and concise.
+    - Do not use generic AI filler phrases such as "In conclusion," "It is important to note," or "Delving into."
+    - Each chapter must be high-yield and bite-sized, optimized for quick study sessions.
+
+    MANDATORY MARKDOWN STRUCTURE:
+    Every concept explained inside content_markdown MUST follow this exact Markdown structure:
+
+    ### Concept Name
+    **The Bottom Line:** A strict one-sentence definition of the concept.
+
+    **The Mechanics / The Why:**
+    - A brief bullet explaining the underlying mechanism, theory, or process.
+    - A brief bullet explaining the underlying mechanism, theory, or process.
+    - A brief bullet explaining the underlying mechanism, theory, or process.
+
+    **Real-World Scenario:** A realistic, practical application of this concept specific to ${userDomain}. If the domain is Nursing, use a clinical patient scenario. If the domain is Business, use a corporate case study. If the domain is Computer Science, use a software architecture problem.
+
+    Adhere to this JSON schema exactly:
     {
       "course_id": "uuid",
       "title": "String",
+      "domain": "${userDomain}",
       "style": "String (e.g., 'Professional', 'Simple', 'Academic')",
       "chapters": [
         {
           "id": 1,
           "title": "String",
           "summary": "String",
-          "content_markdown": "String (300 words, rich text)",
-          "audio_script": "String (Conversational script)",
+          "content_markdown": "String using the mandatory Markdown structure for every concept",
+          "audio_script": "String (brief conversational script, no paragraph longer than 3 sentences)",
           "quiz": [
              // Generate exactly 5 questions
             { "question": "String", "options": ["A", "B", "C", "D"], "correct_answer": 0 }
@@ -134,29 +233,31 @@ export async function generateCourse(userTopic: string, userContext: string = ""
     DESIGN RULES:
     1. Structure: Exactly 5 chapters.
     2. Quiz: Exactly 5 questions per chapter.
-    3. Output: ONLY raw JSON.
+    3. content_markdown must contain 2-3 concepts per chapter.
+    4. The Real-World Scenario in each concept must be specific to ${userDomain}.
+    5. Output: ONLY raw JSON.
   `;
 
   try {
     const started = Date.now();
     await logEvent('generate_course', {
       user: username,
-      request: { topic: userTopic, userContext }
+      request: { topic: userTopic, userContext, userDomain }
     });
 
-    const completion = await getOpenAIClient().chat.completions.create({
-      model: requireOpenAIModel(),
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Create a course on: "${userTopic}"` },
-      ],
-      response_format: { type: "json_object" },
-    });
+    let draftText = await generateInitialDraft(systemPrompt, userTopic);
+    let trustSignalReview = "";
+    let revisedForEvidence = false;
 
-    const content = completion.choices[0].message.content;
-    if (!content) throw new Error("No content generated");
+    for (let iteration = 0; iteration < 2; iteration++) {
+      trustSignalReview = await evaluateTrustSignal(draftText);
+      if (trustSignalReview.toUpperCase().startsWith("PASS")) break;
 
-    const course = JSON.parse(content) as Course;
+      draftText = await reviseDraft(draftText, trustSignalReview);
+      revisedForEvidence = true;
+    }
+
+    const course = JSON.parse(draftText) as Course;
     const initialResult = await verifyCourseContent(course);
 
     if (initialResult.score < 90) {
@@ -167,8 +268,8 @@ export async function generateCourse(userTopic: string, userContext: string = ""
         user: username,
         courseId: refinedCourse.course_id,
         latencyMs: Date.now() - started,
-        request: { topic: userTopic },
-        response: { verification: finalResult, originalVerification: initialResult }
+        request: { topic: userTopic, trustSignalReview },
+        response: { verification: finalResult, originalVerification: initialResult, revisedForEvidence }
       });
 
       return { 
@@ -183,7 +284,7 @@ export async function generateCourse(userTopic: string, userContext: string = ""
       user: username,
       courseId: course.course_id,
       latencyMs: Date.now() - started,
-      response: { verification: initialResult }
+      response: { verification: initialResult, trustSignalReview, revisedForEvidence }
     });
 
     return { 

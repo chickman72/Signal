@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { LogOut, PlusCircle, Radio, Settings, GraduationCap, Trash2, Shield } from 'lucide-react';
+import { LogOut, PlusCircle, Radio, Settings, Trash2, Shield } from 'lucide-react';
 import { Course, User } from './types';
 
 interface SidebarProps {
@@ -120,24 +120,15 @@ export default function Sidebar({
         </button>
       </div>
 
-      {user.role === "instructor" || user.role === "administrator" ? (
+      {user.role === "administrator" ? (
         <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <a
-            href={`/instructor?instructorId=${encodeURIComponent(user.username)}`}
+            href="/admin"
             className="w-full flex items-center gap-3 p-3 rounded-xl text-slate-600 hover:bg-white hover:text-slate-800 transition"
           >
-            <GraduationCap className="w-5 h-5" />
-            <span className="font-semibold">Instructor Studio</span>
+            <Shield className="w-5 h-5" />
+            <span className="font-semibold">Admin</span>
           </a>
-          {user.role === "administrator" ? (
-            <a
-              href="/admin"
-              className="mt-2 w-full flex items-center gap-3 p-3 rounded-xl text-slate-600 hover:bg-white hover:text-slate-800 transition"
-            >
-              <Shield className="w-5 h-5" />
-              <span className="font-semibold">Admin</span>
-            </a>
-          ) : null}
         </div>
       ) : null}
 

@@ -13,7 +13,7 @@ export async function createUserAccountAction(
     const displayName = String(formData.get("displayName") || "").trim();
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
-    const role = (String(formData.get("role") || "student") as "student" | "instructor" | "administrator");
+    const role = (String(formData.get("role") || "student") as "student" | "administrator");
 
     await signupUser(email, password, displayName, "", role);
     return { ok: true, message: "User created." };
@@ -41,7 +41,7 @@ export async function updateUserAccountAction(
     const username = String(formData.get("username") || "").trim();
     const displayName = String(formData.get("displayName") || "").trim();
     const email = String(formData.get("email") || "").trim().toLowerCase();
-    const role = String(formData.get("role") || "student").trim() as "student" | "instructor" | "administrator";
+    const role = String(formData.get("role") || "student").trim() as "student" | "administrator";
 
     if (!username || !email) {
       throw new Error("Username and email are required.");

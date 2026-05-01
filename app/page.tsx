@@ -912,7 +912,7 @@ export default function SignalApp() {
                                  {isExpanded && (
                                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}>
                                      <div data-chapter-body="true" className="pt-6 text-slate-700 cursor-auto" onClick={e => e.stopPropagation()}>
-                                       <article className="prose prose-emerald max-w-none prose-p:text-slate-700 prose-p:leading-relaxed prose-headings:text-slate-950 prose-headings:font-bold prose-li:text-slate-700 prose-strong:text-slate-950 prose-strong:font-bold">
+                                       <article className="course-markdown prose prose-emerald max-w-none prose-p:text-slate-700 prose-p:leading-8 prose-headings:text-slate-950 prose-headings:font-bold prose-li:text-slate-700 prose-strong:text-slate-950 prose-strong:font-bold">
                                          <ReactMarkdown>{chapter.content_markdown}</ReactMarkdown>
                                        </article>
  
@@ -994,7 +994,7 @@ export default function SignalApp() {
                                                               <span className="ml-2 text-xs text-slate-600">Loading…</span>
                                                             )}
                                                             {questionInsights[chapter.id]?.[idx] && (
-                                                              <div className="mt-2 prose text-slate-800 max-w-none">
+                                                              <div className="course-markdown mt-2 prose text-slate-800 max-w-none">
                                                                 <ReactMarkdown>{questionInsights[chapter.id][idx]}</ReactMarkdown>
                                                               </div>
                                                             )}
@@ -1020,7 +1020,7 @@ export default function SignalApp() {
                                                   <span className="text-sm font-semibold text-slate-950">Targeted Review</span>
                                                   <span className="text-xs text-slate-600">Missed concepts</span>
                                                 </div>
-                                                <div className="prose text-slate-700 max-w-none">
+                                                <div className="course-markdown prose text-slate-700 max-w-none">
                                                   <ReactMarkdown>{remediations[chapter.id].explanation_markdown}</ReactMarkdown>
                                                 </div>
                                                 <div className="mt-4">

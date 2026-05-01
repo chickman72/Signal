@@ -17,3 +17,43 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.course-markdown {
+  line-height: 1.78;
+}
+
+.course-markdown > * + * {
+  margin-top: 1.15rem;
+}
+
+.course-markdown h2,
+.course-markdown h3 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.25;
+}
+
+.course-markdown h2:first-child,
+.course-markdown h3:first-child {
+  margin-top: 0;
+}
+
+.course-markdown p {
+  margin-top: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.course-markdown ul,
+.course-markdown ol {
+  margin-top: 0.9rem;
+  margin-bottom: 1.1rem;
+  padding-left: 1.4rem;
+}
+
+.course-markdown li + li {
+  margin-top: 0.55rem;
+}
+
+.course-markdown strong {
+  color: #0f172a;
+}

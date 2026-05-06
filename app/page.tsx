@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, ChevronRight, BookOpen, Brain, CheckCircle, Menu, Lock, X, Save, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { generateCourse, generateRemediation, generateQuestionInsight } from './actions';
 import { Course, AppState, User, QuizQuestion, QuizAnswer, VerificationResult, CourseProgress } from './types';
 import QuizPlayer from './QuizPlayer';
@@ -28,6 +30,9 @@ const TRUST_STYLE_MAP: Record<VerificationResult['status'], { bg: string; border
   CAUTION: { bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-700', icon: <AlertTriangle className="w-5 h-5" /> },
   FLAGGED: { bg: 'bg-rose-500/10', border: 'border-rose-500/40', text: 'text-rose-700', icon: <AlertTriangle className="w-5 h-5" /> },
 };
+
+const markdownRemarkPlugins = [remarkMath];
+const markdownRehypePlugins = [rehypeKatex];
 
 export default function SignalApp() {
   // --- STATE ---
@@ -913,7 +918,7 @@ export default function SignalApp() {
                                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}>
                                      <div data-chapter-body="true" className="pt-6 text-slate-700 cursor-auto" onClick={e => e.stopPropagation()}>
                                        <article className="course-markdown prose prose-emerald max-w-none prose-p:text-slate-700 prose-p:leading-8 prose-headings:text-slate-950 prose-headings:font-bold prose-li:text-slate-700 prose-strong:text-slate-950 prose-strong:font-bold">
-                                         <ReactMarkdown>{chapter.content_markdown}</ReactMarkdown>
+                                         <ReactMarkdown remarkPlugins={markdownRemarkPlugins} rehypePlugins={markdownRehypePlugins}>{chapter.content_markdown}</ReactMarkdown>
                                        </article>
  
                                        <div className="mt-8 pt-8 border-t border-slate-200">
@@ -995,7 +1000,7 @@ export default function SignalApp() {
                                                             )}
                                                             {questionInsights[chapter.id]?.[idx] && (
                                                               <div className="course-markdown mt-2 prose text-slate-800 max-w-none">
-                                                                <ReactMarkdown>{questionInsights[chapter.id][idx]}</ReactMarkdown>
+                                                                <ReactMarkdown remarkPlugins={markdownRemarkPlugins} rehypePlugins={markdownRehypePlugins}>{questionInsights[chapter.id][idx]}</ReactMarkdown>
                                                               </div>
                                                             )}
                                                           </div>
@@ -1021,7 +1026,7 @@ export default function SignalApp() {
                                                   <span className="text-xs text-slate-600">Missed concepts</span>
                                                 </div>
                                                 <div className="course-markdown prose text-slate-700 max-w-none">
-                                                  <ReactMarkdown>{remediations[chapter.id].explanation_markdown}</ReactMarkdown>
+                                                  <ReactMarkdown remarkPlugins={markdownRemarkPlugins} rehypePlugins={markdownRehypePlugins}>{remediations[chapter.id].explanation_markdown}</ReactMarkdown>
                                                 </div>
                                                 <div className="mt-4">
                                                   <QuizPlayer

@@ -9,6 +9,7 @@ describe('Courses API', () => {
   let queryMock: any;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     upsertMock = vi.fn();
     queryFetchAllMock = vi.fn().mockResolvedValue({ resources: [] });
     queryMock = vi.fn(() => ({ fetchAll: queryFetchAllMock }));
@@ -72,5 +73,79 @@ describe('Courses API', () => {
 
     // Ensure query was invoked to fetch courses
     expect(queryMock).toHaveBeenCalled();
+  });
+
+  it('deletes courses with hierarchical partition keys', async () => {
+    const deleteMock = vi.fn().mockResolvedValue({});
+    const itemMock = vi.fn(() => ({ delete: deleteMock }));
+    queryFetchAllMock.mockResolvedValue({
+      resources: [{ id: 'c1', course_id: 'c1', username: 'u1', title: 'T' }],
+    });
+
+    vi.spyOn(db, 'getCoursesContainer').mockResolvedValue({
+      items: { query: queryMock },
+      read: vi.fn().mockResolvedValue({
+        resource: { partitionKey: { paths: ['/username', '/course_id'] } },
+      }),
+      item: itemMock,
+    } as any);
+    vi.spyOn(db, 'getLogsContainer').mockResolvedValue({
+      items: { create: vi.fn().mockResolvedValue({}) },
+    } as any);
+
+    const result = await dbActions.deleteUserCourseById('c1', 'u1');
+
+    expect(itemMock).toHaveBeenCalledWith('c1', ['u1', 'c1']);
+    expect(deleteMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, deleted: 1 });
+  });
+
+  it('deletes preexisting courses with missing partition key values', async () => {
+    const deleteMock = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 404 })
+      .mockResolvedValueOnce({});
+    const itemMock = vi.fn(() => ({ delete: deleteMock }));
+    queryFetchAllMock.mockResolvedValue({
+      resources: [{ id: 'c1', course_id: 'c1', username: 'u1', title: 'T' }],
+    });
+
+    vi.spyOn(db, 'getCoursesContainer').mockResolvedValue({
+      items: { query: queryMock },
+      read: vi.fn().mockResolvedValue({
+        resource: { partitionKey: { paths: ['/legacyPartition'] } },
+      }),
+      item: itemMock,
+    } as any);
+    vi.spyOn(db, 'getLogsContainer').mockResolvedValue({
+      items: { create: vi.fn().mockResolvedValue({}) },
+    } as any);
+
+    const result = await dbActions.deleteUserCourseById('c1', 'u1');
+
+    expect(itemMock).toHaveBeenNthCalledWith(1, 'c1', {});
+    expect(itemMock).toHaveBeenNthCalledWith(2, 'c1', undefined);
+    expect(result).toEqual({ ok: true, deleted: 1 });
+  });
+
+  it('fails deletion when matching courses are found but no item is removed', async () => {
+    const notFoundError = { statusCode: 404 };
+    const deleteMock = vi.fn().mockRejectedValue(notFoundError);
+    const itemMock = vi.fn(() => ({ delete: deleteMock }));
+    queryFetchAllMock.mockResolvedValue({
+      resources: [{ id: 'c1', course_id: 'c1', username: 'u1', title: 'T' }],
+    });
+
+    vi.spyOn(db, 'getCoursesContainer').mockResolvedValue({
+      items: { query: queryMock },
+      read: vi.fn().mockResolvedValue({
+        resource: { partitionKey: { paths: ['/username'] } },
+      }),
+      item: itemMock,
+    } as any);
+
+    await expect(dbActions.deleteUserCourseById('c1', 'u1')).rejects.toThrow(
+      'Course c1 was found but could not be deleted.',
+    );
   });
 });

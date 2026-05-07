@@ -341,7 +341,7 @@ export default function SignalApp() {
     const confirmed = window.confirm(`Delete "${course.title}"? This cannot be undone.`);
     if (!confirmed) return;
     try {
-      const res = await fetch(`/api/courses/${course.course_id}?username=${encodeURIComponent(user.username)}`, {
+      const res = await fetch(`/api/courses/${encodeURIComponent(course.course_id)}?username=${encodeURIComponent(user.username)}`, {
         method: 'DELETE',
       });
       if (!res.ok) {

@@ -2,6 +2,7 @@
 
 import { getUsersContainer, getCoursesContainer, getLogsContainer } from './lib/db';
 import { User, Course, ActivityLogEntry, ActivityEventType } from './types';
+import { PartitionKeyBuilder, type PartitionKey, type PrimitivePartitionKeyValue } from '@azure/cosmos';
 import crypto from 'crypto';
 
 function hashPassword(password: string, salt?: string) {
@@ -188,28 +189,40 @@ export async function deleteUserCourseById(courseId: string, username: string) {
   if (!courseId || !username) {
     throw new Error("courseId and username are required.");
   }
+  type CourseRecord = Course & {
+    id?: string;
+    username?: string;
+    [key: string]: unknown;
+  };
+
   const container = await getCoursesContainer();
   const { resources } = await container.items
     .query({
-      query: "SELECT * FROM c WHERE c.course_id = @courseId OR c.id = @courseId",
-      parameters: [{ name: "@courseId", value: courseId }],
+      query: "SELECT * FROM c WHERE (c.course_id = @courseId OR c.id = @courseId) AND c.username = @username",
+      parameters: [
+        { name: "@courseId", value: courseId },
+        { name: "@username", value: username },
+      ],
     })
     .fetchAll();
   if (!resources.length) {
     return { ok: true, deleted: 0 };
   }
+  const courseRecords = resources as CourseRecord[];
 
   const { resource: containerInfo } = await container.read();
-  const pkPath = containerInfo?.partitionKey?.paths?.[0] ?? "/id";
-  const pkField = pkPath.replace(/^\//, "");
+  const pkPaths = containerInfo?.partitionKey?.paths?.length
+    ? containerInfo.partitionKey.paths
+    : ["/id"];
 
-  const getPartitionKeyValue = (record: any) => {
-    if (!pkField) return undefined;
-    const segments = pkField.split("/");
-    let value = record;
+  const getPathValue = (record: CourseRecord, path: string) => {
+    const normalizedPath = path.replace(/^\//, "");
+    if (!normalizedPath) return undefined;
+    const segments = normalizedPath.split("/");
+    let value: unknown = record;
     for (const segment of segments) {
       if (value && typeof value === "object" && segment in value) {
-        value = value[segment];
+        value = (value as Record<string, unknown>)[segment];
       } else {
         return undefined;
       }
@@ -217,17 +230,41 @@ export async function deleteUserCourseById(courseId: string, username: string) {
     return value;
   };
 
-  const attemptDelete = async (record: any) => {
+  const buildPartitionKeyValue = (record: CourseRecord): PartitionKey => {
+    const builder = new PartitionKeyBuilder();
+    for (const path of pkPaths) {
+      const value = getPathValue(record, path);
+      if (value === undefined) {
+        builder.addNoneValue();
+      } else if (value === null) {
+        builder.addNullValue();
+      } else if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        builder.addValue(value);
+      } else {
+        builder.addNoneValue();
+      }
+    }
+    const values = [...builder.values] as PrimitivePartitionKeyValue[];
+    return values.length === 1 ? values[0] : values;
+  };
+
+  const partitionKeyKey = (value: unknown) => JSON.stringify(value);
+
+  const attemptDelete = async (record: CourseRecord) => {
     const itemId = record.id ?? record.course_id ?? courseId;
-    const derivedKey = getPartitionKeyValue(record);
     const partitionKeys = [
-      derivedKey,
+      buildPartitionKeyValue(record),
+      {},
+      undefined,
       record.username,
       record.id,
       record.course_id,
       username,
-    ].filter((value): value is string => Boolean(value));
-    for (const key of partitionKeys) {
+    ];
+    const uniquePartitionKeys = Array.from(
+      new Map(partitionKeys.map((key) => [partitionKeyKey(key), key])).values(),
+    );
+    for (const key of uniquePartitionKeys) {
       try {
         await container.item(itemId, key).delete();
         return true;
@@ -239,14 +276,19 @@ export async function deleteUserCourseById(courseId: string, username: string) {
     return false;
   };
 
-  await Promise.all(resources.map(attemptDelete));
+  const deleteResults = await Promise.all(courseRecords.map(attemptDelete));
+  const deleted = deleteResults.filter(Boolean).length;
+  if (deleted === 0) {
+    throw new Error(`Course ${courseId} was found but could not be deleted.`);
+  }
+
   await logEvent("generate_course", {
     user: username,
     courseId,
     success: true,
     response: { action: "delete_course" },
   });
-  return { ok: true, deleted: resources.length };
+  return { ok: true, deleted };
 }
 
 // --- ACTIVITY LOGGING ---

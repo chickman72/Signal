@@ -12,6 +12,15 @@ const MIN_COMPLETION_TOKENS = 4096;
 const DEFAULT_FAST_MODEL = "gpt-4o-mini";
 let openaiClient: OpenAI | null = null;
 
+async function logEventSafely(eventType: Parameters<typeof logEvent>[0], entry: Parameters<typeof logEvent>[1]) {
+  try {
+    return await logEvent(eventType, entry);
+  } catch (error) {
+    console.error(`Activity log failed for ${eventType}:`, error);
+    return null;
+  }
+}
+
 function getOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY.");
@@ -383,7 +392,7 @@ export async function generateCourse(userTopic: string, userContext: string = ""
 
   try {
     const started = Date.now();
-    await logEvent('generate_course', {
+    await logEventSafely('generate_course', {
       user: username,
       request: { topic: userTopic, userContext, userDomain }
     });
@@ -452,7 +461,7 @@ export async function generateCourse(userTopic: string, userContext: string = ""
 
     const finalVerification = trustSignalToVerification(trustSignalReview);
 
-    await logEvent(usedFallback ? 'refinement' : 'verification', {
+    await logEventSafely(usedFallback ? 'refinement' : 'verification', {
       user: username,
       courseId: course.course_id,
       latencyMs: Date.now() - started,
@@ -474,7 +483,7 @@ export async function generateCourse(userTopic: string, userContext: string = ""
     };
 
   } catch (error) {
-    await logEvent('error', {
+    await logEventSafely('error', {
       user: username,
       request: { topic: userTopic },
       success: false,
